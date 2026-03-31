@@ -1,0 +1,23 @@
+{
+  "name": "claude-connect",
+  "version": "0.1.0",
+  "description": "CLI para configurar Claude Code con proveedores de modelos externos",
+  "type": "module",
+  "bin": {
+    "claude-connect": "./bin/claude-connect"
+  },
+  "scripts": {
+    "start": "./bin/claude-connect",
+    "test": "node --no-warnings=ExperimentalWarning --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "cli",
+    "claude",
+    "qwen",
+    "terminal"
+  ],
+  "license": "MIT"
+}
