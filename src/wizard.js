@@ -6,7 +6,7 @@ import {
 import { getCatalogStore } from './data/catalog-store.js';
 import { gatewayBaseUrl } from './gateway/constants.js';
 import { getGatewayStatus } from './gateway/state.js';
-import { startGatewayInBackground, stopGateway } from './gateway/server.js';
+import { restartGatewayInBackground, stopGateway } from './gateway/server.js';
 import { runOAuthAuthorization, saveOAuthToken } from './lib/oauth.js';
 import {
   buildProfile,
@@ -422,8 +422,8 @@ async function activateClaudeFromSavedProfile() {
 
   const result = await activateClaudeProfile({ profile });
   const gateway = result.connectionMode === 'gateway'
-    ? await startGatewayInBackground()
-    : null;
+    ? await restartGatewayInBackground()
+    : await stopGateway();
   const status = await getClaudeSwitchStatus();
 
   renderInfoScreen({
@@ -441,7 +441,11 @@ async function activateClaudeFromSavedProfile() {
           : `Endpoint directo: ${result.connectionBaseUrl}`,
         colors.soft
       ),
-      ...(gateway ? [colorize(`Gateway activo en PID: ${gateway.pid ?? 'sin PID'}`, colors.soft)] : []),
+      ...(result.connectionMode === 'gateway'
+        ? [colorize(`Gateway activo en PID: ${gateway.pid ?? 'sin PID'}`, colors.soft)]
+        : gateway.stopped
+          ? [colorize(`Gateway anterior detenido: ${gateway.pid ?? 'sin PID'}`, colors.soft)]
+          : []),
       colorize(`Settings: ${result.claudeSettingsPath}`, colors.soft),
       colorize(`Sesion Claude: ${result.claudeAccountPath}`, colors.soft),
       colorize(`Credenciales Claude: ${result.claudeCredentialsPath}`, colors.soft),

@@ -261,7 +261,8 @@ async function forwardChatCompletion({ openAiRequest, context, refreshOnUnauthor
   }
 
   const message = payload?.error?.message || payload?.message || payload?.error || `HTTP ${response.status}`;
-  throw new Error(`Qwen devolvio un error: ${message}`);
+  const providerName = context?.profile?.provider?.name ?? context?.profile?.provider?.id ?? 'El proveedor';
+  throw new Error(`${providerName} devolvio un error: ${message}`);
 }
 
 function buildHealthPayload(context) {
@@ -510,20 +511,29 @@ export async function startGatewayInBackground() {
   throw new Error(`No pude iniciar el gateway local. Revisa el log: ${gatewayLogPath}`);
 }
 
+export async function restartGatewayInBackground() {
+  await stopGateway();
+  return await startGatewayInBackground();
+}
+
 export async function stopGateway() {
   const { gatewayLogPath } = await resolveClaudeConnectPaths();
   const state = await readGatewayState();
   const pid = Number(state?.pid ?? 0);
 
   if (!isProcessAlive(pid)) {
+    const stalePid = await findListeningPidByPort(gatewayPort);
+    const staleProcessCleared = await clearStaleGatewayProcess();
+
     await writeGatewayState({
       active: false,
-      stoppedAt: new Date().toISOString()
+      stoppedAt: new Date().toISOString(),
+      logPath: gatewayLogPath
     });
 
     return {
-      stopped: false,
-      pid: null,
+      stopped: staleProcessCleared,
+      pid: staleProcessCleared ? stalePid : null,
       logPath: gatewayLogPath
     };
   }
