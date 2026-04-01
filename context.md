@@ -22,6 +22,7 @@ La app hoy ya soporta:
 - edición y eliminación de conexiones guardadas
 - guardado local opcional de API keys compartidas por proveedor
 - gateway local Anthropic-compatible
+- comando de versión del CLI
 - activación reversible sobre la instalación real de `Claude Code`
 - snapshot y restauración de:
   - `settings.json`
@@ -94,7 +95,7 @@ Nota:
 - modelo: `kimi-for-coding`
 - auth: `token`
 - base URL: `https://api.kimi.com/coding/`
-- integración: directa sobre Claude Code
+- integración: a través de gateway local Anthropic-compatible para poder normalizar mejor imágenes y compatibilidad
 
 ### DeepSeek
 
@@ -277,8 +278,10 @@ Archivos principales:
 Se usa hoy para:
 
 - `OpenCode Go` en sus modelos `chat/completions`
+- `Kimi`
 - `Qwen`
 - `Zen` en sus modelos `chat/completions`
+- `OpenRouter`
 
 Endpoint local:
 
@@ -290,13 +293,15 @@ Responsabilidades:
 - resolver el perfil activo
 - leer token OAuth o API key según el perfil
 - traducir requests Anthropic a OpenAI-compatible
+- normalizar algunos bloques de imagen antes de reenviar al upstream
 - reenviar al upstream correcto según el modelo
 - soportar `stream` y endpoints básicos de mensajes
 
 Limitación actual:
 
-- el gateway solo soporta hoy upstream tipo `openai-chat`
+- el gateway soporta hoy upstream tipo `openai-chat` y un pass-through Anthropic puntual para `Kimi`
 - aún no convierte a `responses` ni a endpoints tipo Google
+- formatos de imagen no soportados por el proveedor, por ejemplo `AVIF` en Kimi, seguirán fallando aunque el bridge esté bien
 
 ## Compatibilidad Linux y Windows
 
@@ -317,6 +322,8 @@ Se corrigieron además:
 - `npm start` para Windows
 - apertura del navegador en OAuth de Qwen en Windows
 - reutilización del gateway si el puerto ya estaba ocupado por una instancia sana
+- reinicio controlado del gateway al activar perfiles críticos
+- supresión del warning experimental de SQLite en el binario publicado
 
 ## Navegación de la UI
 
@@ -341,3 +348,4 @@ Estado actual del repo:
 - el catálogo compartido vive como seeds en código
 - las credenciales de usuario no se suben al repo
 - el paquete ya fue preparado para npm y publicado
+- el CLI ya soporta `claude-connect --version`, `-v` y `claude-connect version`
