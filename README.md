@@ -2,6 +2,10 @@
 
 CLI en Node.js para conectar `Claude Code` con proveedores externos desde una interfaz de consola.
 
+Paquete en npm:
+
+- https://www.npmjs.com/package/claude-connect
+
 ## Estado actual
 
 La app ya soporta:
@@ -37,6 +41,12 @@ Instalación desde npm:
 ```bash
 npm install -g claude-connect
 claude-connect
+```
+
+Instalación simple:
+
+```bash
+npm i claude-connect
 ```
 
 Ejecución sin instalación global:
