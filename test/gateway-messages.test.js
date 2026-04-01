@@ -96,6 +96,46 @@ test('buildOpenAIRequestFromAnthropic maps assistant tool_use and user tool_resu
   assert.equal(request.messages[1].tool_call_id, 'toolu_1');
 });
 
+test('buildOpenAIRequestFromAnthropic maps anthropic image blocks to openai image_url parts', () => {
+  const request = buildOpenAIRequestFromAnthropic({
+    model: 'big-pickle',
+    body: {
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: 'Lee esta imagen'
+            },
+            {
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: 'image/png',
+                data: 'aGVsbG8='
+              }
+            }
+          ]
+        }
+      ]
+    }
+  });
+
+  assert.equal(request.messages[0].role, 'user');
+  assert.ok(Array.isArray(request.messages[0].content));
+  assert.deepEqual(request.messages[0].content[0], {
+    type: 'text',
+    text: 'Lee esta imagen'
+  });
+  assert.deepEqual(request.messages[0].content[1], {
+    type: 'image_url',
+    image_url: {
+      url: 'data:image/png;base64,aGVsbG8='
+    }
+  });
+});
+
 test('buildAnthropicMessageFromOpenAI maps tool calls back to anthropic blocks', () => {
   const message = buildAnthropicMessageFromOpenAI({
     requestedModel: 'qwen3-coder-plus',

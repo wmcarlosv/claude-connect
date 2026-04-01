@@ -52,6 +52,58 @@ function normalizeBlocks(content) {
   return [content];
 }
 
+function buildOpenAIContentPartFromAnthropicBlock(block) {
+  if (typeof block === 'string') {
+    return {
+      type: 'text',
+      text: block
+    };
+  }
+
+  if (!isObject(block)) {
+    return {
+      type: 'text',
+      text: collectText(block)
+    };
+  }
+
+  if (block.type === 'text') {
+    return {
+      type: 'text',
+      text: typeof block.text === 'string' ? block.text : collectText(block.text)
+    };
+  }
+
+  if (block.type === 'image') {
+    const source = isObject(block.source) ? block.source : {};
+
+    if (source.type === 'base64' && typeof source.data === 'string' && typeof source.media_type === 'string') {
+      return {
+        type: 'image_url',
+        image_url: {
+          url: `data:${source.media_type};base64,${source.data}`
+        }
+      };
+    }
+
+    if (typeof source.url === 'string' && source.url.length > 0) {
+      return {
+        type: 'image_url',
+        image_url: {
+          url: source.url
+        }
+      };
+    }
+
+    throw new Error('El gateway recibio una imagen en un formato no soportado por el adaptador OpenAI.');
+  }
+
+  return {
+    type: 'text',
+    text: collectText(block)
+  };
+}
+
 function safeParseJson(value) {
   if (typeof value !== 'string' || value.length === 0) {
     return {};
@@ -108,16 +160,19 @@ export function buildOpenAIRequestFromAnthropic({ body, model }) {
     const blocks = normalizeBlocks(message?.content);
 
     if (message?.role === 'user') {
-      let textParts = [];
+      let contentParts = [];
 
       for (const block of blocks) {
         if (block?.type === 'tool_result') {
-          if (textParts.length > 0) {
+          if (contentParts.length > 0) {
+            const onlyText = contentParts.every((part) => part?.type === 'text');
             messages.push({
               role: 'user',
-              content: textParts.join('\n\n')
+              content: onlyText
+                ? contentParts.map((part) => part.text).join('\n\n')
+                : contentParts
             });
-            textParts = [];
+            contentParts = [];
           }
 
           messages.push({
@@ -128,13 +183,16 @@ export function buildOpenAIRequestFromAnthropic({ body, model }) {
           continue;
         }
 
-        textParts.push(collectText(block?.text ?? block));
+        contentParts.push(buildOpenAIContentPartFromAnthropicBlock(block));
       }
 
-      if (textParts.length > 0) {
+      if (contentParts.length > 0) {
+        const onlyText = contentParts.every((part) => part?.type === 'text');
         messages.push({
           role: 'user',
-          content: textParts.join('\n\n')
+          content: onlyText
+            ? contentParts.map((part) => part.text).join('\n\n')
+            : contentParts
         });
       }
 
