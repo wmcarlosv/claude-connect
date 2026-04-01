@@ -658,7 +658,8 @@ async function createNewConnection(store) {
     const { authUrl, tokenPayload } = await runOAuthAuthorization({
       providerName: catalog.name,
       oauthConfig: catalog.oauth,
-      statusRenderer: renderOAuthStatus
+      statusRenderer: renderOAuthStatus,
+      waitUntilReady: async () => await waitForAnyKey()
     });
 
     const tokenFile = await saveOAuthToken({

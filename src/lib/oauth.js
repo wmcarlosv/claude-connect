@@ -170,9 +170,9 @@ export function buildBrowserOpenCommands(url, platform = process.platform) {
 
   if (platform === 'win32') {
     return [
-      ['powershell.exe', ['-NoProfile', '-Command', `Start-Process '${url.replace(/'/g, "''")}'`]],
       ['rundll32.exe', ['url.dll,FileProtocolHandler', url]],
-      ['cmd.exe', ['/c', 'start', '""', url]]
+      ['powershell.exe', ['-NoProfile', '-Command', `Start-Process '${url.replace(/'/g, "''")}'`]],
+      ['cmd.exe', ['/d', '/s', '/c', `start "" "${url}"`]]
     ];
   }
 
@@ -249,7 +249,15 @@ async function requestDeviceCode(oauthConfig) {
   };
 }
 
-async function pollForToken({ oauthConfig, deviceCode, codeVerifier, expiresInSeconds, statusRenderer }) {
+async function pollForToken({
+  oauthConfig,
+  deviceCode,
+  codeVerifier,
+  expiresInSeconds,
+  statusRenderer,
+  authUrl,
+  userCode
+}) {
   const startedAt = Date.now();
   let pollIntervalMs = 2000;
 
@@ -278,6 +286,11 @@ async function pollForToken({ oauthConfig, deviceCode, codeVerifier, expiresInSe
         title: 'Esperando autorizacion',
         subtitle: 'Completa el login en qwen.ai. El CLI esta consultando el token.',
         lines: [
+          'URL para copiar y pegar:',
+          authUrl,
+          '',
+          `User code: ${userCode}`,
+          '',
           payload.error_description || 'La autorizacion sigue pendiente.',
           'Esperando aprobacion...'
         ]
@@ -299,7 +312,7 @@ async function pollForToken({ oauthConfig, deviceCode, codeVerifier, expiresInSe
   throw new Error('Se agoto el tiempo esperando la aprobacion de Qwen OAuth.');
 }
 
-export async function runOAuthAuthorization({ providerName, oauthConfig, statusRenderer }) {
+export async function runOAuthAuthorization({ providerName, oauthConfig, statusRenderer, waitUntilReady }) {
   statusRenderer({
     title: 'Qwen OAuth',
     subtitle: `Iniciando el login de ${providerName} con Qwen Code.`,
@@ -329,16 +342,23 @@ export async function runOAuthAuthorization({ providerName, oauthConfig, statusR
       'La URL mostrada es la de Qwen, no la de Alibaba Cloud.',
       browserOpened
         ? 'Si no ves la pagina, copia esta URL y pegala manualmente en tu navegador.'
-        : 'Copia la URL anterior en tu navegador y continua el login.'
+        : 'Copia la URL anterior en tu navegador y continua el login.',
+      'Cuando ya tengas la pagina abierta, presiona cualquier tecla para empezar a esperar el token.'
     ]
   });
+
+  if (typeof waitUntilReady === 'function') {
+    await waitUntilReady();
+  }
 
   const tokenPayload = await pollForToken({
     oauthConfig,
     deviceCode: deviceAuthorization.device_code,
     codeVerifier,
     expiresInSeconds: Number(deviceAuthorization.expires_in || 600),
-    statusRenderer
+    statusRenderer,
+    authUrl,
+    userCode: deviceAuthorization.user_code
   });
 
   statusRenderer({
