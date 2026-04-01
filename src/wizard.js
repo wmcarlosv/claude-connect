@@ -10,6 +10,8 @@ import { startGatewayInBackground, stopGateway } from './gateway/server.js';
 import { runOAuthAuthorization, saveOAuthToken } from './lib/oauth.js';
 import {
   getIsolatedClaudeCommand,
+  launchConfiguredClaude,
+  launchIsolatedClaudeProfile,
   prepareIsolatedClaudeRuntime,
   supportsIsolatedClaudeRuntime
 } from './lib/isolated-claude.js';
@@ -173,6 +175,57 @@ function buildExternalConflictLines(conflicts) {
     ...conflicts.map((conflict) => colorize(`${conflict.key}=${conflict.value}`, colors.warning)),
     colorize('Estas variables del sistema o de la terminal pueden pisar la configuracion activada.', colors.warning)
   ];
+}
+
+function buildLaunchItems() {
+  return [
+    {
+      label: 'Abrir Claude ahora',
+      description: 'Cierra temporalmente Claude Connect y abre Claude Code de inmediato.',
+      value: 'open-now'
+    },
+    {
+      label: 'Solo dejar activado',
+      description: 'Mantiene la conexion lista, pero no abre Claude Code todavia.',
+      value: 'keep-only'
+    }
+  ];
+}
+
+async function promptLaunchAfterActivation({ title, subtitle, detailLines }) {
+  return await selectFromList({
+    step: 1,
+    totalSteps: 1,
+    title,
+    subtitle,
+    items: buildLaunchItems(),
+    allowBack: true,
+    detailBuilder: (selected) => selected.value === 'open-now'
+      ? [...detailLines, 'Claude Code se abrira ahora con esta configuracion.']
+      : [...detailLines, 'La configuracion queda lista para usarla despues.'],
+    footerHint: '↑/↓ mover · Enter confirmar · Tab volver · Esc salir'
+  });
+}
+
+async function launchClaudeAndReturn(launcher) {
+  closeAppScreen();
+
+  try {
+    await launcher();
+  } finally {
+    openAppScreen();
+  }
+
+  renderInfoScreen({
+    title: 'Claude finalizado',
+    subtitle: 'Claude Code se cerro y Claude Connect sigue abierto.',
+    lines: [
+      colorize('Puedes continuar desde el menu principal.', colors.soft)
+    ],
+    footer: 'Presiona una tecla para volver'
+  });
+
+  return await waitForAnyKey();
 }
 
 function renderWelcome() {
@@ -375,6 +428,37 @@ async function activateClaudeFromSavedProfile() {
   if (supportsIsolatedClaudeRuntime(profile)) {
     const revertResult = await revertClaudeProfile();
     const runtime = await prepareIsolatedClaudeRuntime({ profile });
+    const launchAction = await promptLaunchAfterActivation({
+      title: 'Launcher aislado listo',
+      subtitle: 'Tu Claude normal queda intacto y Kimi corre en un runtime separado.',
+      detailLines: [
+        `Perfil: ${profile.profileName}`,
+        `Modelo: ${profile.model.id}`,
+        `Endpoint: ${runtime.connectionBaseUrl}`,
+        `Runtime: ${runtime.runtimeHome}`,
+        `Settings aislado: ${runtime.claudeSettingsPath}`,
+        `Launcher generado: ${runtime.launcherPath}`,
+        `Comando recomendado: ${getIsolatedClaudeCommand(profile)}`,
+        `Fallback universal: claude-connect launch-profile ${profile.profileName}`,
+        revertResult.reverted
+          ? 'Claude global fue restaurado para evitar el conflicto con claude.ai.'
+          : 'Claude global no fue modificado.'
+      ]
+    });
+
+    if (isBack(launchAction)) {
+      return launchAction;
+    }
+
+    if (isExit(launchAction)) {
+      return launchAction;
+    }
+
+    if (launchAction === 'open-now') {
+      return await launchClaudeAndReturn(async () => {
+        await launchIsolatedClaudeProfile({ profile });
+      });
+    }
 
     renderInfoScreen({
       title: 'Launcher aislado listo',
@@ -408,6 +492,37 @@ async function activateClaudeFromSavedProfile() {
     ? await startGatewayInBackground()
     : null;
   const status = await getClaudeSwitchStatus();
+  const launchAction = await promptLaunchAfterActivation({
+    title: 'Claude Code actualizado',
+    subtitle: result.connectionMode === 'gateway'
+      ? 'El switch quedo aplicado y el gateway local ya fue iniciado.'
+      : 'El switch quedo aplicado usando una conexion Anthropic directa.',
+    detailLines: [
+      `Perfil activo: ${profile.profileName}`,
+      `Modelo configurado: ${profile.model.id}`,
+      `Modo: ${result.connectionMode}`,
+      result.connectionMode === 'gateway'
+        ? `Gateway configurado: ${result.gatewayBaseUrl}`
+        : `Endpoint directo: ${result.connectionBaseUrl}`,
+      ...(gateway ? [`Gateway activo en PID: ${gateway.pid ?? 'sin PID'}`] : []),
+      `Settings: ${result.claudeSettingsPath}`,
+      `Estado del switch: ${result.stateFilePath}`
+    ]
+  });
+
+  if (isBack(launchAction)) {
+    return launchAction;
+  }
+
+  if (isExit(launchAction)) {
+    return launchAction;
+  }
+
+  if (launchAction === 'open-now') {
+    return await launchClaudeAndReturn(async () => {
+      await launchConfiguredClaude();
+    });
+  }
 
   renderInfoScreen({
     title: 'Claude Code actualizado',

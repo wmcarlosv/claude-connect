@@ -116,6 +116,45 @@ function buildLaunchEnv(runtimeHome) {
   return env;
 }
 
+async function launchClaudeProcess({ env = process.env, args = [] }) {
+  const command = process.platform === 'win32' ? 'claude.cmd' : 'claude';
+
+  await new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd: process.cwd(),
+      env,
+      stdio: 'inherit'
+    });
+
+    child.on('error', (error) => {
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+        reject(new Error('No encontre el binario `claude` en PATH. Instala @anthropic-ai/claude-code antes de lanzar este runtime.'));
+        return;
+      }
+
+      reject(error);
+    });
+
+    child.on('exit', (code, signal) => {
+      if (typeof code === 'number' && code !== 0) {
+        reject(new Error(`Claude termino con codigo ${code}.`));
+        return;
+      }
+
+      if (signal) {
+        reject(new Error(`Claude termino por la senal ${signal}.`));
+        return;
+      }
+
+      resolve(null);
+    });
+  });
+}
+
+export async function launchConfiguredClaude(args = []) {
+  await launchClaudeProcess({ args });
+}
+
 export async function prepareIsolatedClaudeRuntime({
   profile,
   gatewayBaseUrl = 'http://127.0.0.1:4310/anthropic'
@@ -184,37 +223,9 @@ export async function prepareIsolatedClaudeRuntime({
 
 export async function launchIsolatedClaudeProfile({ profile, args = [] }) {
   const runtime = await prepareIsolatedClaudeRuntime({ profile });
-  const command = process.platform === 'win32' ? 'claude.cmd' : 'claude';
-
-  await new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
-      cwd: process.cwd(),
-      env: buildLaunchEnv(runtime.runtimeHome),
-      stdio: 'inherit'
-    });
-
-    child.on('error', (error) => {
-      if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
-        reject(new Error('No encontre el binario `claude` en PATH. Instala @anthropic-ai/claude-code antes de lanzar este runtime.'));
-        return;
-      }
-
-      reject(error);
-    });
-
-    child.on('exit', (code, signal) => {
-      if (typeof code === 'number' && code !== 0) {
-        reject(new Error(`Claude termino con codigo ${code}.`));
-        return;
-      }
-
-      if (signal) {
-        reject(new Error(`Claude termino por la senal ${signal}.`));
-        return;
-      }
-
-      resolve(null);
-    });
+  await launchClaudeProcess({
+    env: buildLaunchEnv(runtime.runtimeHome),
+    args
   });
 
   return runtime;
