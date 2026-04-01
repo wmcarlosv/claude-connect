@@ -58,47 +58,81 @@ async function resolveTokenValueForProfile(profile) {
   throw new Error(`Falta la API key para ${profile.provider.name}. Guarda la API key en la conexion o exporta ${envVar}.`);
 }
 
-async function resolveClaudeTransportForProfile({ profile, gatewayBaseUrl }) {
+export async function resolveClaudeTransportForProfile({ profile, gatewayBaseUrl }) {
   const authMethod = profile.auth.method === 'api_key' ? 'token' : profile.auth.method;
 
   if (profile.provider.id === 'deepseek' && authMethod === 'token') {
     return {
       connectionMode: 'direct',
       connectionBaseUrl: 'https://api.deepseek.com/anthropic',
-      authToken: await resolveTokenValueForProfile(profile)
+      authToken: await resolveTokenValueForProfile(profile),
+      authEnvMode: 'auth_token',
+      extraEnv: {
+        API_TIMEOUT_MS: '600000',
+        ANTHROPIC_MODEL: profile.model.id,
+        ANTHROPIC_DEFAULT_HAIKU_MODEL: profile.model.id
+      }
+    };
+  }
+
+  if (profile.provider.id === 'kimi' && authMethod === 'token') {
+    const token = await resolveTokenValueForProfile(profile);
+
+    return {
+      connectionMode: 'direct',
+      connectionBaseUrl: 'https://api.kimi.com/coding/',
+      authToken: token,
+      authEnvMode: 'api_key',
+      extraEnv: {
+        ENABLE_TOOL_SEARCH: 'false'
+      }
     };
   }
 
   return {
     connectionMode: 'gateway',
     connectionBaseUrl: gatewayBaseUrl,
-    authToken: 'claude-connect-local'
+    authToken: 'claude-connect-local',
+    authEnvMode: 'auth_token',
+    extraEnv: {}
   };
 }
 
-export function buildClaudeSettingsForProfile({ baseSettings, profile, connectionBaseUrl, authToken, connectionMode }) {
+export function buildClaudeSettingsForProfile({
+  baseSettings,
+  profile,
+  connectionBaseUrl,
+  authToken,
+  authEnvMode = 'auth_token',
+  connectionMode,
+  extraEnv = {}
+}) {
   const next = structuredClone(baseSettings);
   const env = isObject(next.env) ? { ...next.env } : {};
   const authMethod = profile.auth.method === 'api_key' ? 'token' : profile.auth.method;
 
   next.model = profile.model.id;
   env.ANTHROPIC_BASE_URL = connectionBaseUrl;
-  env.ANTHROPIC_AUTH_TOKEN = authToken;
+  delete env.ANTHROPIC_AUTH_TOKEN;
+  delete env.ANTHROPIC_API_KEY;
+
+  if (authEnvMode === 'api_key') {
+    env.ANTHROPIC_API_KEY = authToken;
+  } else {
+    env.ANTHROPIC_AUTH_TOKEN = authToken;
+  }
+
   env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = 1;
   env.CLAUDE_CONNECT_ACTIVE_PROFILE = profile.profileName;
   env.CLAUDE_CONNECT_PROVIDER = profile.provider.id;
   env.CLAUDE_CONNECT_MODEL = profile.model.id;
   env.CLAUDE_CONNECT_AUTH_METHOD = authMethod;
   env.CLAUDE_CONNECT_CONNECTION_MODE = connectionMode;
+  delete env.ENABLE_TOOL_SEARCH;
+  delete env.ANTHROPIC_MODEL;
+  delete env.ANTHROPIC_DEFAULT_HAIKU_MODEL;
 
-  if (connectionMode === 'direct' && profile.provider.id === 'deepseek') {
-    env.API_TIMEOUT_MS = '600000';
-    env.ANTHROPIC_MODEL = profile.model.id;
-    env.ANTHROPIC_DEFAULT_HAIKU_MODEL = profile.model.id;
-  } else {
-    delete env.ANTHROPIC_MODEL;
-    delete env.ANTHROPIC_DEFAULT_HAIKU_MODEL;
-  }
+  Object.assign(env, extraEnv);
 
   if (authMethod === 'token') {
     env.CLAUDE_CONNECT_TOKEN_ENV_VAR = profile.auth.envVar;
@@ -128,7 +162,9 @@ export async function activateClaudeProfile({ profile, gatewayBaseUrl = 'http://
     profile,
     connectionBaseUrl: transport.connectionBaseUrl,
     authToken: transport.authToken,
-    connectionMode: transport.connectionMode
+    authEnvMode: transport.authEnvMode,
+    connectionMode: transport.connectionMode,
+    extraEnv: transport.extraEnv
   });
 
   await writeJson(claudeSettingsPath, nextSettings);

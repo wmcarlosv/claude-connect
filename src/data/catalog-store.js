@@ -60,6 +60,39 @@ CREATE TABLE IF NOT EXISTS provider_oauth_configs (
 
 const seedProviders = [
   {
+    id: 'kimi',
+    name: 'Kimi',
+    vendor: 'Moonshot AI',
+    description: 'Kimi Code para Claude Code usando el endpoint Anthropic oficial de Kimi.',
+    docsUrl: 'https://www.kimi.com/code/docs/en/more/third-party-agents.html',
+    docsVerifiedAt: '2026-04-01',
+    baseUrl: 'https://api.kimi.com/coding/',
+    defaultModelId: 'kimi-for-coding',
+    defaultAuthMethodId: 'token',
+    defaultApiKeyEnvVar: 'KIMI_API_KEY',
+    models: [
+      {
+        id: 'kimi-for-coding',
+        name: 'Kimi For Coding',
+        category: 'Coding',
+        contextWindow: '262144',
+        summary: 'Modelo oficial de Kimi Code para Claude Code. El modo thinking se conmuta con Tab dentro de Claude Code.',
+        sortOrder: 1,
+        isDefault: 1
+      }
+    ],
+    authMethods: [
+      {
+        id: 'token',
+        name: 'Token',
+        description: 'Conexion por API key contra el endpoint Anthropic oficial del proveedor.',
+        credentialKind: 'env_var',
+        sortOrder: 1,
+        isDefault: 1
+      }
+    ]
+  },
+  {
     id: 'deepseek',
     name: 'DeepSeek',
     vendor: 'DeepSeek',
@@ -94,7 +127,7 @@ const seedProviders = [
       {
         id: 'token',
         name: 'Token',
-        description: 'Conexion por API key contra el endpoint compatible con OpenAI del proveedor.',
+        description: 'Conexion por API key contra el endpoint Anthropic oficial del proveedor.',
         credentialKind: 'env_var',
         sortOrder: 1,
         isDefault: 1

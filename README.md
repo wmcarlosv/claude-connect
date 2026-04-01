@@ -4,14 +4,17 @@ CLI en Node.js para configurar perfiles de conexion de Claude Code con modelos e
 
 ## Estado actual
 
-Primera version con flujo interactivo para `DeepSeek` y `Qwen` usando catalogo SQLite:
+Primera version con flujo interactivo para `Kimi`, `DeepSeek` y `Qwen` usando catalogo SQLite:
 
 - seleccion de proveedor
 - seleccion de modelo segun proveedor
 - seleccion de tipo de conexion `OAuth` o `Token`
 - uso de `base_url` almacenada en el proveedor
 - soporte para `Qwen OAuth` abriendo `qwen.ai`
+- soporte para `Kimi` por `API key`
 - soporte para `DeepSeek` por `API key`
+- activacion directa de Kimi sobre su endpoint Anthropic oficial, sin gateway local
+- runtime aislado para `Kimi` sin tocar tu sesion normal de `claude.ai`
 - activacion directa de DeepSeek sobre su endpoint Anthropic oficial, sin gateway local
 - edicion y eliminacion de conexiones guardadas
 - guardado local opcional de API keys para perfiles por token
@@ -30,6 +33,7 @@ Para exponer el comando globalmente en tu entorno local:
 ```bash
 npm link
 claude-connect
+claude-kimi
 ```
 
 Los perfiles, tokens y estado interno se guardan en el directorio detectado de Claude Connect. Por defecto:
@@ -73,6 +77,12 @@ El menu principal ahora permite:
 - editar o eliminar conexiones guardadas
 - ver el estado actual del switch
 - revertir y restaurar tu `settings.json` original detectado automaticamente
+
+Importante para `Kimi`:
+
+- ya no se activa sobre tu `settings.json` global
+- `claude-connect` prepara un runtime aislado para evitar conflicto con una sesion abierta de `claude.ai`
+- puedes lanzarlo con `claude-kimi` o con `claude-connect launch-profile kimi-kimi-for-coding-token`
 
 Claude Connect preserva la configuracion original en el directorio detectado de Claude Connect, dentro de:
 

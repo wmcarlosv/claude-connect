@@ -18,8 +18,10 @@ Hoy la app ya soporta:
 
 - interfaz interactiva de consola
 - catálogo en SQLite
+- proveedor `Kimi`
 - proveedor `DeepSeek`
 - proveedor `Qwen`
+- modelo `Kimi For Coding` (`kimi-for-coding`)
 - modelos `deepseek-chat` y `deepseek-reasoner`
 - modelo `Qwen Coder` (`qwen3-coder-plus`)
 - autenticación por `Token`
@@ -28,6 +30,7 @@ Hoy la app ya soporta:
 - almacenamiento local opcional de API keys para perfiles por token
 - guardado de perfiles y tokens localmente
 - activación reversible sobre la configuración real de `Claude Code`
+- runtime aislado para `Kimi`, separado de la sesion normal de `claude.ai`
 - gateway local `Anthropic-compatible`
 - soporte de descubrimiento de rutas para Linux y Windows
 - versionado del catalogo SQLite dentro del repo sin incluir credenciales de usuarios
@@ -41,8 +44,9 @@ El flujo de usuario hoy es:
 3. seleccionar tipo de conexión: `OAuth` o `Token`
 4. guardar perfil local
 5. `Activar en Claude`
-6. arrancar gateway local
-7. usar `Claude Code` apuntando al gateway
+6. si es `Qwen`, arrancar gateway local
+7. si es `Kimi`, preparar launcher aislado
+8. usar `Claude Code` con el modo correspondiente
 
 También existe:
 
@@ -51,6 +55,7 @@ También existe:
 - `Detener gateway`
 - `Gestionar conexiones`
 - `Revertir Claude`
+- comando `claude-kimi`
 
 ## Arquitectura
 
@@ -75,11 +80,16 @@ El repo comparte ese catalogo base, pero no comparte perfiles, tokens ni API key
 
 Actualmente el catálogo siembra dos proveedores:
 
+- `Kimi`
 - `DeepSeek`
 - `Qwen`
 
 Con:
 
+- Kimi:
+  - `base_url`: `https://api.kimi.com/coding/`
+  - modelo: `kimi-for-coding`
+  - auth: `token`
 - DeepSeek:
   - `base_url`: `https://api.deepseek.com`
   - modelos: `deepseek-chat`, `deepseek-reasoner`
@@ -142,6 +152,7 @@ La app:
 - preserva una copia lógica del estado original
 - escribe la nueva configuración para usar el gateway local
 - permite revertir al estado anterior
+- evita tocar el Claude global cuando el proveedor usa runtime aislado
 
 Variables de entorno que inyecta al activar un perfil:
 
@@ -197,7 +208,28 @@ Para perfiles OAuth nuevos se guarda `apiBaseUrl = https://portal.qwen.ai/v1`.
 
 Para perfiles viejos, el gateway también infiere la base usando `resource_url` del token.
 
-## 6.1 DeepSeek
+## 6.1 Kimi
+
+Kimi quedó integrado por `API key` únicamente.
+
+Base URL configurada:
+
+- `https://api.kimi.com/coding/`
+- activacion directa en Claude Code: `https://api.kimi.com/coding/`
+
+Modelo expuesto:
+
+- `kimi-for-coding`
+
+Según la documentación oficial vigente, Kimi Code para Claude Code usa:
+
+- `ANTHROPIC_BASE_URL=https://api.kimi.com/coding/`
+- `ANTHROPIC_API_KEY=<token>`
+- `ENABLE_TOOL_SEARCH=false`
+
+Para evitar el conflicto entre una sesión normal de `claude.ai` y `Kimi`, el proyecto ahora crea un runtime separado en `~/.claude-connect/runtimes/...` y lo lanza con `claude-kimi` o `claude-connect launch-profile <perfil>`.
+
+## 6.2 DeepSeek
 
 DeepSeek quedó integrado por `API key` únicamente.
 
@@ -232,6 +264,8 @@ Overrides soportados:
 - `CLAUDE_SETTINGS_PATH`
 - `CLAUDE_CONFIG_DIR`
 - `CLAUDE_CODE_CONFIG_DIR`
+
+Tambien se corrigio el punto de entrada del paquete para Windows: los binarios publicados ahora son scripts Node y no wrappers bash, lo que hace que `npm link`, `claude-connect` y `claude-kimi` sean portables en Linux y Windows.
 - `CLAUDE_CONNECT_HOME`
 
 Defaults contemplados:

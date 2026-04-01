@@ -2,11 +2,20 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createCatalogStore } from '../src/data/catalog-store.js';
 
-test('sqlite catalog seeds deepseek and qwen providers with models and auth', () => {
+test('sqlite catalog seeds kimi, deepseek and qwen providers with models and auth', () => {
   const store = createCatalogStore({ filename: ':memory:' });
   const providers = store.getProviders();
 
-  assert.equal(providers.length, 2);
+  assert.equal(providers.length, 3);
+
+  const kimi = store.getProviderCatalog('kimi');
+  assert.ok(kimi);
+  assert.equal(kimi.baseUrl, 'https://api.kimi.com/coding/');
+  assert.equal(kimi.models.length, 1);
+  assert.equal(kimi.models[0].id, 'kimi-for-coding');
+  assert.equal(kimi.authMethods.length, 1);
+  assert.equal(kimi.authMethods[0].id, 'token');
+  assert.equal(kimi.oauth, null);
 
   const deepseek = store.getProviderCatalog('deepseek');
   assert.ok(deepseek);

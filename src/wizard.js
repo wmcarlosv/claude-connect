@@ -9,6 +9,11 @@ import { getGatewayStatus } from './gateway/state.js';
 import { startGatewayInBackground, stopGateway } from './gateway/server.js';
 import { runOAuthAuthorization, saveOAuthToken } from './lib/oauth.js';
 import {
+  getIsolatedClaudeCommand,
+  prepareIsolatedClaudeRuntime,
+  supportsIsolatedClaudeRuntime
+} from './lib/isolated-claude.js';
+import {
   buildProfile,
   deleteProfileFile,
   listProfiles,
@@ -38,7 +43,7 @@ function mainMenuItems() {
     },
     {
       label: 'Activar en Claude',
-      description: 'Aplica un perfil a Claude Code y arranca el gateway local.',
+      description: 'Aplica el perfil o prepara un lanzador aislado segun el proveedor.',
       value: 'activate'
     },
     {
@@ -162,7 +167,7 @@ function renderWelcome() {
         colorize('4. Guardar perfil y credenciales locales', colors.soft),
         '',
         colorize('Catalogo actual', colors.bold, colors.accentSoft),
-        colorize('DeepSeek y Qwen ya vienen almacenados en SQLite.', colors.soft),
+        colorize('Kimi, DeepSeek y Qwen ya vienen almacenados en SQLite.', colors.soft),
         '',
         colorize('Seguridad', colors.bold, colors.accentSoft),
         colorize('El token OAuth se guarda localmente y el modo Token usa una variable de entorno.', colors.soft)
@@ -213,7 +218,7 @@ function renderSummary({ profile, filePath }) {
               colorize('Tambien puedes guardar la API key directamente en Claude Connect.', colors.soft)
             ])
       ],
-      footer: [colorize('Presiona cualquier tecla para salir', colors.dim, colors.muted)]
+      footer: [colorize('Presiona cualquier tecla para volver al menu', colors.dim, colors.muted)]
     })
   );
 }
@@ -336,6 +341,36 @@ async function activateClaudeFromSavedProfile() {
     ]
   });
 
+  if (supportsIsolatedClaudeRuntime(profile)) {
+    const revertResult = await revertClaudeProfile();
+    const runtime = await prepareIsolatedClaudeRuntime({ profile });
+
+    renderInfoScreen({
+      title: 'Launcher aislado listo',
+      subtitle: 'Tu Claude normal queda intacto y Kimi corre en un runtime separado.',
+      lines: [
+        colorize(`Perfil: ${profile.profileName}`, colors.soft),
+        colorize(`Modelo: ${profile.model.id}`, colors.soft),
+        colorize(`Endpoint: ${runtime.connectionBaseUrl}`, colors.soft),
+        colorize(`Runtime: ${runtime.runtimeHome}`, colors.soft),
+        colorize(`Settings aislado: ${runtime.claudeSettingsPath}`, colors.soft),
+        colorize(`Comando recomendado: ${getIsolatedClaudeCommand(profile)}`, colors.soft),
+        colorize(`Fallback universal: claude-connect launch-profile ${profile.profileName}`, colors.soft),
+        '',
+        colorize(
+          revertResult.reverted
+            ? 'Claude global fue restaurado para evitar el conflicto con claude.ai.'
+            : 'Claude global no fue modificado.',
+          colors.soft
+        )
+      ],
+      footer: 'Presiona una tecla para volver'
+    });
+
+    await waitForAnyKey();
+    return;
+  }
+
   const result = await activateClaudeProfile({ profile });
   const gateway = result.connectionMode === 'gateway'
     ? await startGatewayInBackground()
@@ -364,7 +399,7 @@ async function activateClaudeFromSavedProfile() {
       colorize(
         result.connectionMode === 'gateway'
           ? 'Claude Code ya puede hablar con el gateway local en esa URL.'
-          : 'Claude Code ya puede hablar directamente con la API Anthropic de DeepSeek.',
+          : 'Claude Code ya puede hablar directamente con la API Anthropic del proveedor.',
         colors.soft
       )
     ],
