@@ -184,7 +184,7 @@ function renderWelcome() {
         colorize('4. Guardar perfil y credenciales locales', colors.soft),
         '',
         colorize('Catalogo actual', colors.bold, colors.accentSoft),
-        colorize('Kimi, DeepSeek y Qwen ya vienen almacenados en SQLite.', colors.soft),
+        colorize('Zen, Kimi, DeepSeek y Qwen ya vienen almacenados en SQLite.', colors.soft),
         '',
         colorize('Seguridad', colors.bold, colors.accentSoft),
         colorize('El token OAuth se guarda localmente y el modo Token usa una variable de entorno.', colors.soft)

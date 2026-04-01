@@ -12,6 +12,9 @@ export function slugifyProfileName(value) {
 }
 
 export function buildProfile({ provider, model, authMethod, profileName, apiKeyEnvVar, oauthSession }) {
+  const protocol = model.apiStyle === 'openai-chat'
+    ? 'openai-compatible'
+    : model.apiStyle ?? 'openai-compatible';
   const profile = {
     schemaVersion: 1,
     profileName,
@@ -23,7 +26,12 @@ export function buildProfile({ provider, model, authMethod, profileName, apiKeyE
     model: {
       id: model.id,
       name: model.name,
-      contextWindow: model.contextWindow
+      contextWindow: model.contextWindow,
+      transportMode: model.transportMode,
+      apiStyle: model.apiStyle,
+      apiBaseUrl: model.apiBaseUrl,
+      apiPath: model.apiPath,
+      authEnvMode: model.authEnvMode
     },
     auth: {
       method: authMethod.id
@@ -32,7 +40,7 @@ export function buildProfile({ provider, model, authMethod, profileName, apiKeyE
       baseUrl: provider.baseUrl
     },
     integration: {
-      protocol: 'openai-compatible',
+      protocol,
       notes: provider.description
     },
     createdAt: new Date().toISOString()

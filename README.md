@@ -1,11 +1,11 @@
 # Claude Connect
 
-> Conecta `Claude Code` con `Kimi`, `DeepSeek` y `Qwen` desde una interfaz de consola clara, rápida y reversible.
+> Conecta `Claude Code` con `Zen`, `Kimi`, `DeepSeek` y `Qwen` desde una interfaz de consola clara, rápida y reversible.
 
 [![npm version](https://img.shields.io/npm/v/claude-connect?style=for-the-badge&logo=npm&color=cb3837)](https://www.npmjs.com/package/claude-connect)
 [![node](https://img.shields.io/badge/node-%3E%3D22-2f7d32?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![license](https://img.shields.io/badge/license-MIT-0f172a?style=for-the-badge)](./LICENSE)
-[![providers](https://img.shields.io/badge/providers-Kimi%20%7C%20DeepSeek%20%7C%20Qwen-0ea5e9?style=for-the-badge)](https://www.npmjs.com/package/claude-connect)
+[![providers](https://img.shields.io/badge/providers-Zen%20%7C%20Kimi%20%7C%20DeepSeek%20%7C%20Qwen-0ea5e9?style=for-the-badge)](https://www.npmjs.com/package/claude-connect)
 
 ## Why Claude Connect
 
@@ -13,7 +13,7 @@
 
 ### Highlights
 
-- `Kimi`, `DeepSeek` y `Qwen` listos desde el primer arranque
+- `Zen`, `Kimi`, `DeepSeek` y `Qwen` listos desde el primer arranque
 - soporte para `Token` y `OAuth` cuando el proveedor lo permite
 - activación reversible sobre la instalación real de `Claude Code`
 - limpieza automática del conflicto entre `claude.ai` y `ANTHROPIC_API_KEY`
@@ -72,6 +72,7 @@ Nueva conexion
 
 Al activar:
 
+- `Zen` usa conexión directa o gateway según el modelo elegido
 - `Kimi` apunta a `https://api.kimi.com/coding/`
 - `DeepSeek` apunta a `https://api.deepseek.com/anthropic`
 - `Qwen` apunta al gateway local `http://127.0.0.1:4310/anthropic`
@@ -80,9 +81,16 @@ Al activar:
 
 | Proveedor | Modelos | Auth | Integración |
 | --- | --- | --- | --- |
+| `Zen` | `Claude*` de Zen + modelos `chat/completions` de Zen | `Token` | Mixta |
 | `Kimi` | `kimi-for-coding` | `Token` | Directa |
 | `DeepSeek` | `deepseek-chat`, `deepseek-reasoner` | `Token` | Directa |
 | `Qwen` | `qwen3-coder-plus` | `OAuth`, `Token` | Gateway local |
+
+Nota sobre `Zen`:
+
+- los modelos Anthropic de Zen van por conexión directa
+- los modelos de Zen servidos por `chat/completions` van por gateway local
+- esta primera integración no incluye todavía los modelos de Zen expuestos por `responses` ni los de endpoint tipo Google
 
 ## What It Stores
 

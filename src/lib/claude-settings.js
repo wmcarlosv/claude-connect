@@ -118,34 +118,37 @@ async function resolveTokenValueForProfile(profile) {
   throw new Error(`Falta la API key para ${profile.provider.name}. Guarda la API key en la conexion o exporta ${envVar}.`);
 }
 
-export async function resolveClaudeTransportForProfile({ profile, gatewayBaseUrl }) {
+export async function resolveClaudeTransportForProfile({
+  profile,
+  gatewayBaseUrl = 'http://127.0.0.1:4310/anthropic'
+}) {
   const authMethod = profile.auth.method === 'api_key' ? 'token' : profile.auth.method;
+  const modelTransportMode = profile?.model?.transportMode ?? 'gateway';
+  const modelApiBaseUrl = typeof profile?.model?.apiBaseUrl === 'string' && profile.model.apiBaseUrl.length > 0
+    ? profile.model.apiBaseUrl
+    : profile?.endpoint?.baseUrl;
+  const modelAuthEnvMode = profile?.model?.authEnvMode ?? 'auth_token';
 
-  if (profile.provider.id === 'deepseek' && authMethod === 'token') {
-    return {
-      connectionMode: 'direct',
-      connectionBaseUrl: 'https://api.deepseek.com/anthropic',
-      authToken: await resolveTokenValueForProfile(profile),
-      authEnvMode: 'auth_token',
-      extraEnv: {
-        API_TIMEOUT_MS: '600000',
-        ANTHROPIC_MODEL: profile.model.id,
-        ANTHROPIC_DEFAULT_HAIKU_MODEL: profile.model.id
-      }
-    };
-  }
-
-  if (profile.provider.id === 'kimi' && authMethod === 'token') {
+  if (authMethod === 'token' && modelTransportMode === 'direct') {
     const token = await resolveTokenValueForProfile(profile);
+    const extraEnv = {};
+
+    if (profile.provider.id === 'deepseek') {
+      extraEnv.API_TIMEOUT_MS = '600000';
+      extraEnv.ANTHROPIC_MODEL = profile.model.id;
+      extraEnv.ANTHROPIC_DEFAULT_HAIKU_MODEL = profile.model.id;
+    }
+
+    if (profile.provider.id === 'kimi') {
+      extraEnv.ENABLE_TOOL_SEARCH = 'false';
+    }
 
     return {
       connectionMode: 'direct',
-      connectionBaseUrl: 'https://api.kimi.com/coding/',
+      connectionBaseUrl: modelApiBaseUrl,
       authToken: token,
-      authEnvMode: 'api_key',
-      extraEnv: {
-        ENABLE_TOOL_SEARCH: 'false'
-      }
+      authEnvMode: modelAuthEnvMode,
+      extraEnv
     };
   }
 

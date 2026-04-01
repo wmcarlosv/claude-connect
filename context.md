@@ -10,6 +10,7 @@ La app hoy ya soporta:
 
 - interfaz interactiva de consola
 - catálogo local en SQLite
+- proveedor `Zen`
 - proveedor `Kimi`
 - proveedor `DeepSeek`
 - proveedor `Qwen`
@@ -18,7 +19,7 @@ La app hoy ya soporta:
 - perfiles locales reutilizables
 - edición y eliminación de conexiones guardadas
 - guardado local opcional de API keys para perfiles por token
-- gateway local Anthropic-compatible para `Qwen`
+- gateway local Anthropic-compatible
 - activación reversible sobre la instalación real de `Claude Code`
 - snapshot y restauración de:
   - `settings.json`
@@ -28,6 +29,41 @@ La app hoy ya soporta:
 - navegación con `Volver` y confirmación de salida con doble `Esc`
 
 ## Proveedores activos
+
+### Zen
+
+- provider id: `zen`
+- auth: `token`
+- base URL del proveedor: `https://opencode.ai/zen`
+- variable sugerida: `OPENCODE_API_KEY`
+- integración: mixta
+
+Modelos Zen soportados hoy:
+
+- Anthropic directos:
+  - `claude-opus-4-6`
+  - `claude-opus-4-5`
+  - `claude-opus-4-1`
+  - `claude-sonnet-4-6`
+  - `claude-sonnet-4-5`
+  - `claude-sonnet-4`
+  - `claude-haiku-4-5`
+  - `claude-3-5-haiku`
+- OpenAI-compatible vía gateway:
+  - `minimax-m2.5`
+  - `minimax-m2.5-free`
+  - `glm-5`
+  - `kimi-k2.5`
+  - `big-pickle`
+  - `mimo-v2-pro-free`
+  - `mimo-v2-omni-free`
+  - `qwen3.6-plus-free`
+  - `nemotron-3-super-free`
+
+Nota:
+
+- esta primera integración de `Zen` no incluye todavía los modelos expuestos por `responses`
+- tampoco incluye todavía los modelos de endpoint tipo Google
 
 ### Kimi
 
@@ -71,6 +107,8 @@ La app hoy ya soporta:
 
 Si el perfil activado es:
 
+- `Zen` con modelo Anthropic: Claude usa endpoint directo de Zen
+- `Zen` con modelo `chat/completions`: Claude usa el gateway local
 - `Kimi`: Claude usa endpoint directo de Kimi
 - `DeepSeek`: Claude usa endpoint directo Anthropic-compatible de DeepSeek
 - `Qwen`: Claude usa el gateway local en `127.0.0.1:4310`
@@ -96,6 +134,7 @@ Detalles:
 - la base local se genera automáticamente en `storage/claude-connect.sqlite`
 - la base SQLite ya no se versiona en git
 - esto evita conflictos de `git pull` por cambios locales del catálogo
+- la tabla `models` ya guarda metadatos de transporte por modelo
 
 El catálogo guarda:
 
@@ -104,6 +143,9 @@ El catálogo guarda:
 - métodos de autenticación
 - configuración OAuth por proveedor
 - `base_url` por proveedor
+- modo de transporte del modelo
+- estilo de API del modelo
+- base URL y path upstream por modelo
 
 ## Perfiles y secretos
 
@@ -121,7 +163,7 @@ Los perfiles guardan:
 - modelo
 - método de autenticación
 - endpoint base
-- metadata del perfil
+- metadata de transporte del modelo
 
 Los secretos viven fuera del repo, dentro del directorio local de Claude Connect.
 
@@ -173,6 +215,7 @@ La app hoy:
 - escribe la configuración activa del proveedor elegido
 - guarda snapshots del estado original
 - limpia de forma reversible credenciales de `claude.ai` cuando hace falta
+- decide si el perfil debe ir directo o por gateway según los metadatos del modelo
 - restaura todo con `Revertir Claude`
 
 Archivos afectados:
@@ -181,7 +224,7 @@ Archivos afectados:
 - `~/.claude.json`
 - `.credentials.json`
 
-Esto fue necesario especialmente para `Kimi`, porque Claude Code seguía detectando `claude.ai` aunque `settings.json` ya tuviera `ANTHROPIC_API_KEY`.
+Esto fue necesario especialmente para `Kimi` y modelos directos con `ANTHROPIC_API_KEY`, porque Claude Code seguía detectando `claude.ai` aunque `settings.json` ya tuviera otra credencial activa.
 
 ## Gateway local
 
@@ -192,7 +235,10 @@ Archivos principales:
 - `src/gateway/state.js`
 - `src/gateway/constants.js`
 
-Se usa para `Qwen`.
+Se usa hoy para:
+
+- `Qwen`
+- `Zen` en sus modelos `chat/completions`
 
 Endpoint local:
 
@@ -203,8 +249,14 @@ Responsabilidades:
 - exponer interfaz Anthropic-compatible a Claude Code
 - resolver el perfil activo
 - leer token OAuth o API key según el perfil
-- traducir requests/responses entre formatos
+- traducir requests Anthropic a OpenAI-compatible
+- reenviar al upstream correcto según el modelo
 - soportar `stream` y endpoints básicos de mensajes
+
+Limitación actual:
+
+- el gateway solo soporta hoy upstream tipo `openai-chat`
+- aún no convierte a `responses` ni a endpoints tipo Google
 
 ## Compatibilidad Linux y Windows
 
@@ -248,4 +300,4 @@ Estado actual del repo:
 - la base SQLite local ya no se versiona
 - el catálogo compartido vive como seeds en código
 - las credenciales de usuario no se suben al repo
-- los cambios del fix de credenciales de Claude y del no-track de SQLite ya fueron publicados en `master`
+- el paquete ya fue preparado para npm y publicado

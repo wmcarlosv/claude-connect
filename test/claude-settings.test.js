@@ -7,6 +7,7 @@ import {
   activateClaudeProfile,
   buildClaudeSettingsForProfile,
   detectExternalClaudeEnvConflicts,
+  resolveClaudeTransportForProfile,
   revertClaudeProfile
 } from '../src/lib/claude-settings.js';
 import { createCatalogStore } from '../src/data/catalog-store.js';
@@ -137,6 +138,57 @@ test('buildClaudeSettingsForProfile supports kimi direct anthropic mode', () => 
   assert.equal(next.env.ANTHROPIC_AUTH_TOKEN, undefined);
   assert.equal(next.env.ENABLE_TOOL_SEARCH, 'false');
   assert.equal(next.env.CLAUDE_CONNECT_CONNECTION_MODE, 'direct');
+
+  store.close();
+});
+
+test('resolveClaudeTransportForProfile supports zen direct anthropic models', async () => {
+  const store = createCatalogStore({ filename: ':memory:' });
+  const provider = store.getProviderCatalog('zen');
+  const profile = buildProfile({
+    provider,
+    model: provider.models.find((model) => model.id === 'claude-sonnet-4-6'),
+    authMethod: provider.authMethods[0],
+    profileName: 'zen-claude-sonnet-4-6-token',
+    apiKeyEnvVar: 'OPENCODE_API_KEY'
+  });
+  const previous = process.env.OPENCODE_API_KEY;
+  process.env.OPENCODE_API_KEY = 'zen-secret';
+
+  try {
+    const transport = await resolveClaudeTransportForProfile({ profile });
+
+    assert.equal(transport.connectionMode, 'direct');
+    assert.equal(transport.connectionBaseUrl, 'https://opencode.ai/zen');
+    assert.equal(transport.authEnvMode, 'api_key');
+    assert.equal(transport.authToken, 'zen-secret');
+  } finally {
+    if (typeof previous === 'string') {
+      process.env.OPENCODE_API_KEY = previous;
+    } else {
+      delete process.env.OPENCODE_API_KEY;
+    }
+
+    store.close();
+  }
+});
+
+test('resolveClaudeTransportForProfile supports zen gateway models', async () => {
+  const store = createCatalogStore({ filename: ':memory:' });
+  const provider = store.getProviderCatalog('zen');
+  const profile = buildProfile({
+    provider,
+    model: provider.models.find((model) => model.id === 'kimi-k2.5'),
+    authMethod: provider.authMethods[0],
+    profileName: 'zen-kimi-k2-5-token',
+    apiKeyEnvVar: 'OPENCODE_API_KEY'
+  });
+  const transport = await resolveClaudeTransportForProfile({ profile });
+
+  assert.equal(transport.connectionMode, 'gateway');
+  assert.equal(transport.connectionBaseUrl, 'http://127.0.0.1:4310/anthropic');
+  assert.equal(transport.authEnvMode, 'auth_token');
+  assert.equal(transport.authToken, 'claude-connect-local');
 
   store.close();
 });

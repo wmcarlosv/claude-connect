@@ -27,6 +27,11 @@ CREATE TABLE IF NOT EXISTS models (
   category TEXT NOT NULL,
   context_window TEXT NOT NULL,
   summary TEXT NOT NULL,
+  transport_mode TEXT NOT NULL DEFAULT 'gateway',
+  api_style TEXT NOT NULL DEFAULT 'openai-chat',
+  api_base_url TEXT,
+  api_path TEXT,
+  auth_env_mode TEXT NOT NULL DEFAULT 'auth_token',
   sort_order INTEGER NOT NULL DEFAULT 0,
   is_default INTEGER NOT NULL DEFAULT 0
 );
@@ -60,6 +65,268 @@ CREATE TABLE IF NOT EXISTS provider_oauth_configs (
 
 const seedProviders = [
   {
+    id: 'zen',
+    name: 'OpenCode Zen',
+    vendor: 'OpenCode',
+    description: 'Zen de OpenCode con modelos curados. Claude va directo para modelos Anthropic y usa gateway para modelos OpenAI-compatible.',
+    docsUrl: 'https://opencode.ai/docs/zen',
+    docsVerifiedAt: '2026-04-01',
+    baseUrl: 'https://opencode.ai/zen',
+    defaultModelId: 'claude-sonnet-4-6',
+    defaultAuthMethodId: 'token',
+    defaultApiKeyEnvVar: 'OPENCODE_API_KEY',
+    models: [
+      {
+        id: 'claude-opus-4-6',
+        name: 'Claude Opus 4.6',
+        category: 'Anthropic',
+        contextWindow: '200K+',
+        summary: 'Modelo Anthropic servido por Zen en el endpoint messages.',
+        transportMode: 'direct',
+        apiStyle: 'anthropic',
+        apiBaseUrl: 'https://opencode.ai/zen',
+        apiPath: '/v1/messages',
+        authEnvMode: 'api_key',
+        sortOrder: 1,
+        isDefault: 0
+      },
+      {
+        id: 'claude-opus-4-5',
+        name: 'Claude Opus 4.5',
+        category: 'Anthropic',
+        contextWindow: '200K+',
+        summary: 'Modelo Anthropic servido por Zen en el endpoint messages.',
+        transportMode: 'direct',
+        apiStyle: 'anthropic',
+        apiBaseUrl: 'https://opencode.ai/zen',
+        apiPath: '/v1/messages',
+        authEnvMode: 'api_key',
+        sortOrder: 2,
+        isDefault: 0
+      },
+      {
+        id: 'claude-opus-4-1',
+        name: 'Claude Opus 4.1',
+        category: 'Anthropic',
+        contextWindow: '200K+',
+        summary: 'Modelo Anthropic servido por Zen en el endpoint messages.',
+        transportMode: 'direct',
+        apiStyle: 'anthropic',
+        apiBaseUrl: 'https://opencode.ai/zen',
+        apiPath: '/v1/messages',
+        authEnvMode: 'api_key',
+        sortOrder: 3,
+        isDefault: 0
+      },
+      {
+        id: 'claude-sonnet-4-6',
+        name: 'Claude Sonnet 4.6',
+        category: 'Anthropic',
+        contextWindow: '200K+',
+        summary: 'Modelo Anthropic servido por Zen en el endpoint messages.',
+        transportMode: 'direct',
+        apiStyle: 'anthropic',
+        apiBaseUrl: 'https://opencode.ai/zen',
+        apiPath: '/v1/messages',
+        authEnvMode: 'api_key',
+        sortOrder: 4,
+        isDefault: 1
+      },
+      {
+        id: 'claude-sonnet-4-5',
+        name: 'Claude Sonnet 4.5',
+        category: 'Anthropic',
+        contextWindow: '200K+',
+        summary: 'Modelo Anthropic servido por Zen en el endpoint messages.',
+        transportMode: 'direct',
+        apiStyle: 'anthropic',
+        apiBaseUrl: 'https://opencode.ai/zen',
+        apiPath: '/v1/messages',
+        authEnvMode: 'api_key',
+        sortOrder: 5,
+        isDefault: 0
+      },
+      {
+        id: 'claude-sonnet-4',
+        name: 'Claude Sonnet 4',
+        category: 'Anthropic',
+        contextWindow: '200K+',
+        summary: 'Modelo Anthropic servido por Zen en el endpoint messages.',
+        transportMode: 'direct',
+        apiStyle: 'anthropic',
+        apiBaseUrl: 'https://opencode.ai/zen',
+        apiPath: '/v1/messages',
+        authEnvMode: 'api_key',
+        sortOrder: 6,
+        isDefault: 0
+      },
+      {
+        id: 'claude-haiku-4-5',
+        name: 'Claude Haiku 4.5',
+        category: 'Anthropic',
+        contextWindow: '200K+',
+        summary: 'Modelo Anthropic servido por Zen en el endpoint messages.',
+        transportMode: 'direct',
+        apiStyle: 'anthropic',
+        apiBaseUrl: 'https://opencode.ai/zen',
+        apiPath: '/v1/messages',
+        authEnvMode: 'api_key',
+        sortOrder: 7,
+        isDefault: 0
+      },
+      {
+        id: 'claude-3-5-haiku',
+        name: 'Claude Haiku 3.5',
+        category: 'Anthropic',
+        contextWindow: '200K+',
+        summary: 'Modelo Anthropic servido por Zen en el endpoint messages.',
+        transportMode: 'direct',
+        apiStyle: 'anthropic',
+        apiBaseUrl: 'https://opencode.ai/zen',
+        apiPath: '/v1/messages',
+        authEnvMode: 'api_key',
+        sortOrder: 8,
+        isDefault: 0
+      },
+      {
+        id: 'minimax-m2.5',
+        name: 'MiniMax M2.5',
+        category: 'OpenAI-compatible',
+        contextWindow: 'Auto',
+        summary: 'Modelo servido por Zen en chat/completions y usado a través del gateway local.',
+        transportMode: 'gateway',
+        apiStyle: 'openai-chat',
+        apiBaseUrl: 'https://opencode.ai/zen/v1',
+        apiPath: '/chat/completions',
+        authEnvMode: 'auth_token',
+        sortOrder: 9,
+        isDefault: 0
+      },
+      {
+        id: 'minimax-m2.5-free',
+        name: 'MiniMax M2.5 Free',
+        category: 'OpenAI-compatible',
+        contextWindow: 'Auto',
+        summary: 'Modelo gratis servido por Zen en chat/completions y usado a través del gateway local.',
+        transportMode: 'gateway',
+        apiStyle: 'openai-chat',
+        apiBaseUrl: 'https://opencode.ai/zen/v1',
+        apiPath: '/chat/completions',
+        authEnvMode: 'auth_token',
+        sortOrder: 10,
+        isDefault: 0
+      },
+      {
+        id: 'glm-5',
+        name: 'GLM 5',
+        category: 'OpenAI-compatible',
+        contextWindow: 'Auto',
+        summary: 'Modelo servido por Zen en chat/completions y usado a través del gateway local.',
+        transportMode: 'gateway',
+        apiStyle: 'openai-chat',
+        apiBaseUrl: 'https://opencode.ai/zen/v1',
+        apiPath: '/chat/completions',
+        authEnvMode: 'auth_token',
+        sortOrder: 11,
+        isDefault: 0
+      },
+      {
+        id: 'kimi-k2.5',
+        name: 'Kimi K2.5',
+        category: 'OpenAI-compatible',
+        contextWindow: 'Auto',
+        summary: 'Modelo servido por Zen en chat/completions y usado a través del gateway local.',
+        transportMode: 'gateway',
+        apiStyle: 'openai-chat',
+        apiBaseUrl: 'https://opencode.ai/zen/v1',
+        apiPath: '/chat/completions',
+        authEnvMode: 'auth_token',
+        sortOrder: 12,
+        isDefault: 0
+      },
+      {
+        id: 'big-pickle',
+        name: 'Big Pickle',
+        category: 'OpenAI-compatible',
+        contextWindow: 'Auto',
+        summary: 'Modelo servido por Zen en chat/completions y usado a través del gateway local.',
+        transportMode: 'gateway',
+        apiStyle: 'openai-chat',
+        apiBaseUrl: 'https://opencode.ai/zen/v1',
+        apiPath: '/chat/completions',
+        authEnvMode: 'auth_token',
+        sortOrder: 13,
+        isDefault: 0
+      },
+      {
+        id: 'mimo-v2-pro-free',
+        name: 'MiMo V2 Pro Free',
+        category: 'OpenAI-compatible',
+        contextWindow: 'Auto',
+        summary: 'Modelo gratis servido por Zen en chat/completions y usado a través del gateway local.',
+        transportMode: 'gateway',
+        apiStyle: 'openai-chat',
+        apiBaseUrl: 'https://opencode.ai/zen/v1',
+        apiPath: '/chat/completions',
+        authEnvMode: 'auth_token',
+        sortOrder: 14,
+        isDefault: 0
+      },
+      {
+        id: 'mimo-v2-omni-free',
+        name: 'MiMo V2 Omni Free',
+        category: 'OpenAI-compatible',
+        contextWindow: 'Auto',
+        summary: 'Modelo gratis servido por Zen en chat/completions y usado a través del gateway local.',
+        transportMode: 'gateway',
+        apiStyle: 'openai-chat',
+        apiBaseUrl: 'https://opencode.ai/zen/v1',
+        apiPath: '/chat/completions',
+        authEnvMode: 'auth_token',
+        sortOrder: 15,
+        isDefault: 0
+      },
+      {
+        id: 'qwen3.6-plus-free',
+        name: 'Qwen 3.6 Plus Free',
+        category: 'OpenAI-compatible',
+        contextWindow: 'Auto',
+        summary: 'Modelo gratis servido por Zen en chat/completions y usado a través del gateway local.',
+        transportMode: 'gateway',
+        apiStyle: 'openai-chat',
+        apiBaseUrl: 'https://opencode.ai/zen/v1',
+        apiPath: '/chat/completions',
+        authEnvMode: 'auth_token',
+        sortOrder: 16,
+        isDefault: 0
+      },
+      {
+        id: 'nemotron-3-super-free',
+        name: 'Nemotron 3 Super Free',
+        category: 'OpenAI-compatible',
+        contextWindow: 'Auto',
+        summary: 'Modelo gratis servido por Zen en chat/completions y usado a través del gateway local.',
+        transportMode: 'gateway',
+        apiStyle: 'openai-chat',
+        apiBaseUrl: 'https://opencode.ai/zen/v1',
+        apiPath: '/chat/completions',
+        authEnvMode: 'auth_token',
+        sortOrder: 17,
+        isDefault: 0
+      }
+    ],
+    authMethods: [
+      {
+        id: 'token',
+        name: 'Token',
+        description: 'Conexion por API key de OpenCode Zen.',
+        credentialKind: 'env_var',
+        sortOrder: 1,
+        isDefault: 1
+      }
+    ]
+  },
+  {
     id: 'kimi',
     name: 'Kimi',
     vendor: 'Moonshot AI',
@@ -77,6 +344,11 @@ const seedProviders = [
         category: 'Coding',
         contextWindow: '262144',
         summary: 'Modelo oficial de Kimi Code para Claude Code. El modo thinking se conmuta con Tab dentro de Claude Code.',
+        transportMode: 'direct',
+        apiStyle: 'anthropic',
+        apiBaseUrl: 'https://api.kimi.com/coding/',
+        apiPath: '/v1/messages',
+        authEnvMode: 'api_key',
         sortOrder: 1,
         isDefault: 1
       }
@@ -110,6 +382,11 @@ const seedProviders = [
         category: 'General',
         contextWindow: '128K',
         summary: 'Modo no razonador de DeepSeek V3.2, apto como opcion base para Claude Code.',
+        transportMode: 'direct',
+        apiStyle: 'anthropic',
+        apiBaseUrl: 'https://api.deepseek.com/anthropic',
+        apiPath: '/v1/messages',
+        authEnvMode: 'auth_token',
         sortOrder: 1,
         isDefault: 1
       },
@@ -119,6 +396,11 @@ const seedProviders = [
         category: 'Reasoning',
         contextWindow: '128K',
         summary: 'Modo razonador de DeepSeek V3.2 con soporte de Tool Calls segun la documentacion oficial.',
+        transportMode: 'direct',
+        apiStyle: 'anthropic',
+        apiBaseUrl: 'https://api.deepseek.com/anthropic',
+        apiPath: '/v1/messages',
+        authEnvMode: 'auth_token',
         sortOrder: 2,
         isDefault: 0
       }
@@ -152,6 +434,11 @@ const seedProviders = [
         category: 'Coding',
         contextWindow: 'Auto',
         summary: 'Modelo fijo para esta primera version, siguiendo el flujo de Qwen Code.',
+        transportMode: 'gateway',
+        apiStyle: 'openai-chat',
+        apiBaseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+        apiPath: '/chat/completions',
+        authEnvMode: 'auth_token',
         sortOrder: 1,
         isDefault: 1
       }
@@ -207,15 +494,22 @@ function seedCatalog(db) {
 
   const insertModel = db.prepare(`
     INSERT INTO models (
-      id, provider_id, name, category, context_window, summary, sort_order, is_default
+      id, provider_id, name, category, context_window, summary,
+      transport_mode, api_style, api_base_url, api_path, auth_env_mode,
+      sort_order, is_default
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       provider_id = excluded.provider_id,
       name = excluded.name,
       category = excluded.category,
       context_window = excluded.context_window,
       summary = excluded.summary,
+      transport_mode = excluded.transport_mode,
+      api_style = excluded.api_style,
+      api_base_url = excluded.api_base_url,
+      api_path = excluded.api_path,
+      auth_env_mode = excluded.auth_env_mode,
       sort_order = excluded.sort_order,
       is_default = excluded.is_default
   `);
@@ -280,6 +574,11 @@ function seedCatalog(db) {
           model.category,
           model.contextWindow,
           model.summary,
+          model.transportMode ?? 'gateway',
+          model.apiStyle ?? 'openai-chat',
+          model.apiBaseUrl ?? null,
+          model.apiPath ?? null,
+          model.authEnvMode ?? 'auth_token',
           model.sortOrder,
           model.isDefault
         );
@@ -324,6 +623,38 @@ function seedCatalog(db) {
   }
 }
 
+function ensureSchemaMigrations(db) {
+  const modelColumns = new Set(
+    db.prepare('PRAGMA table_info(models)').all().map((column) => column.name)
+  );
+
+  const alterStatements = [];
+
+  if (!modelColumns.has('transport_mode')) {
+    alterStatements.push(`ALTER TABLE models ADD COLUMN transport_mode TEXT NOT NULL DEFAULT 'gateway'`);
+  }
+
+  if (!modelColumns.has('api_style')) {
+    alterStatements.push(`ALTER TABLE models ADD COLUMN api_style TEXT NOT NULL DEFAULT 'openai-chat'`);
+  }
+
+  if (!modelColumns.has('api_base_url')) {
+    alterStatements.push(`ALTER TABLE models ADD COLUMN api_base_url TEXT`);
+  }
+
+  if (!modelColumns.has('api_path')) {
+    alterStatements.push(`ALTER TABLE models ADD COLUMN api_path TEXT`);
+  }
+
+  if (!modelColumns.has('auth_env_mode')) {
+    alterStatements.push(`ALTER TABLE models ADD COLUMN auth_env_mode TEXT NOT NULL DEFAULT 'auth_token'`);
+  }
+
+  for (const statement of alterStatements) {
+    db.exec(statement);
+  }
+}
+
 function mapProviderRow(row) {
   return {
     id: row.id,
@@ -349,6 +680,11 @@ function mapModelRow(row) {
     category: row.category,
     contextWindow: row.context_window,
     summary: row.summary,
+    transportMode: row.transport_mode,
+    apiStyle: row.api_style,
+    apiBaseUrl: row.api_base_url,
+    apiPath: row.api_path,
+    authEnvMode: row.auth_env_mode,
     sortOrder: Number(row.sort_order),
     isDefault: Boolean(row.is_default)
   };
@@ -385,6 +721,7 @@ export function createCatalogStore({ filename = defaultCatalogDbPath } = {}) {
 
   const db = new DatabaseSync(filename);
   db.exec(schemaSql);
+  ensureSchemaMigrations(db);
   seedCatalog(db);
 
   const providerListStatement = db.prepare(`

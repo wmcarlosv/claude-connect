@@ -117,7 +117,11 @@ async function resolveGatewayContext() {
     return {
       profile,
       authMethod,
-      upstreamBaseUrl: profile.endpoint.baseUrl,
+      upstreamBaseUrl: typeof profile?.model?.apiBaseUrl === 'string' && profile.model.apiBaseUrl.length > 0
+        ? profile.model.apiBaseUrl
+        : profile.endpoint.baseUrl,
+      upstreamApiStyle: profile?.model?.apiStyle ?? 'openai-chat',
+      upstreamApiPath: profile?.model?.apiPath ?? '/chat/completions',
       accessToken: token.trim()
     };
   }
@@ -149,6 +153,8 @@ async function resolveGatewayContext() {
       profile,
       authMethod,
       upstreamBaseUrl: buildOauthApiBaseUrl(profile, record),
+      upstreamApiStyle: profile?.model?.apiStyle ?? 'openai-chat',
+      upstreamApiPath: profile?.model?.apiPath ?? '/chat/completions',
       accessToken
     };
   }
@@ -157,7 +163,8 @@ async function resolveGatewayContext() {
 }
 
 async function forwardChatCompletion({ openAiRequest, context, refreshOnUnauthorized = true }) {
-  const response = await fetch(`${context.upstreamBaseUrl.replace(/\/$/, '')}/chat/completions`, {
+  const targetUrl = `${context.upstreamBaseUrl.replace(/\/$/, '')}${context.upstreamApiPath || '/chat/completions'}`;
+  const response = await fetch(targetUrl, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -205,6 +212,8 @@ function buildHealthPayload(context) {
     model: context.profile.model.id,
     authMethod: context.authMethod,
     upstreamBaseUrl: context.upstreamBaseUrl,
+    upstreamApiStyle: context.upstreamApiStyle,
+    upstreamApiPath: context.upstreamApiPath,
     pid: process.pid
   };
 }
@@ -243,6 +252,11 @@ async function handleCountTokens(request, response) {
 async function handleMessages(request, response) {
   const body = await readJsonBody(request);
   const context = await resolveGatewayContext();
+
+  if (context.upstreamApiStyle !== 'openai-chat') {
+    throw new Error(`El gateway todavia no soporta el estilo ${context.upstreamApiStyle} para ${context.profile.provider.name}.`);
+  }
+
   const openAiRequest = buildOpenAIRequestFromAnthropic({
     body,
     model: context.profile.model.id
@@ -345,6 +359,8 @@ export async function serveGateway() {
     profileName: initialContext.profile.profileName,
     authMethod: initialContext.authMethod,
     upstreamBaseUrl: initialContext.upstreamBaseUrl,
+    upstreamApiStyle: initialContext.upstreamApiStyle,
+    upstreamApiPath: initialContext.upstreamApiPath,
     baseUrl: gatewayBaseUrl
   });
 
