@@ -18,14 +18,19 @@ Hoy la app ya soporta:
 
 - interfaz interactiva de consola
 - catálogo en SQLite
+- proveedor `DeepSeek`
 - proveedor `Qwen`
-- modelo fijo `Qwen Coder` (`qwen3-coder-plus`)
+- modelos `deepseek-chat` y `deepseek-reasoner`
+- modelo `Qwen Coder` (`qwen3-coder-plus`)
 - autenticación por `Token`
 - autenticación por `OAuth` con device flow de `Qwen Code`
+- edición y eliminación de conexiones guardadas
+- almacenamiento local opcional de API keys para perfiles por token
 - guardado de perfiles y tokens localmente
 - activación reversible sobre la configuración real de `Claude Code`
 - gateway local `Anthropic-compatible`
 - soporte de descubrimiento de rutas para Linux y Windows
+- versionado del catalogo SQLite dentro del repo sin incluir credenciales de usuarios
 
 ## Flujo principal actual
 
@@ -44,6 +49,7 @@ También existe:
 - `Estado Claude`
 - `Estado gateway`
 - `Detener gateway`
+- `Gestionar conexiones`
 - `Revertir Claude`
 
 ## Arquitectura
@@ -54,6 +60,10 @@ Archivo principal:
 
 - `src/data/catalog-store.js`
 
+Archivo versionado en el repo:
+
+- `storage/claude-connect.sqlite`
+
 Se usa SQLite para guardar:
 
 - proveedores
@@ -61,12 +71,19 @@ Se usa SQLite para guardar:
 - métodos de autenticación
 - configuración OAuth por proveedor
 
-Actualmente el catálogo siembra un único proveedor:
+El repo comparte ese catalogo base, pero no comparte perfiles, tokens ni API keys de usuarios.
 
+Actualmente el catálogo siembra dos proveedores:
+
+- `DeepSeek`
 - `Qwen`
 
 Con:
 
+- DeepSeek:
+  - `base_url`: `https://api.deepseek.com`
+  - modelos: `deepseek-chat`, `deepseek-reasoner`
+  - auth: `token`
 - `base_url` para modo token: `https://dashscope.aliyuncs.com/compatible-mode/v1`
 - modelo fijo: `qwen3-coder-plus`
 - auth methods: `token`, `oauth`
@@ -86,6 +103,8 @@ Los perfiles guardan:
 - datos auxiliares de integración
 
 Los perfiles no guardan la API key. En modo token solo se guarda el nombre de la variable de entorno.
+
+Si el usuario decide guardar una API key administrada por la app, esa informacion vive fuera del repo, dentro del directorio local de `Claude Connect`.
 
 ## 3. OAuth de Qwen
 
@@ -178,6 +197,22 @@ Para perfiles OAuth nuevos se guarda `apiBaseUrl = https://portal.qwen.ai/v1`.
 
 Para perfiles viejos, el gateway también infiere la base usando `resource_url` del token.
 
+## 6.1 DeepSeek
+
+DeepSeek quedó integrado por `API key` únicamente.
+
+Base URL configurada:
+
+- `https://api.deepseek.com`
+- activacion directa en Claude Code: `https://api.deepseek.com/anthropic`
+
+Modelos expuestos:
+
+- `deepseek-chat`
+- `deepseek-reasoner`
+
+Según la documentación oficial vigente, DeepSeek expone compatibilidad Anthropic para Claude Code, con `stream` y `tools` soportados.
+
 ## 7. Compatibilidad Linux y Windows
 
 Archivo principal:
@@ -235,6 +270,8 @@ Se verificó:
 ## Decisiones importantes tomadas
 
 - usar SQLite desde el inicio para catálogo de proveedores
+- versionar en git solo la base SQLite del catálogo
+- no versionar perfiles, tokens, API keys ni estado local de usuarios
 - empezar solo con `Qwen`
 - restringir Qwen a `Qwen Coder`
 - usar el OAuth real de `Qwen Code`

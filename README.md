@@ -4,13 +4,17 @@ CLI en Node.js para configurar perfiles de conexion de Claude Code con modelos e
 
 ## Estado actual
 
-Primera version con flujo interactivo para `Qwen` y catalogo SQLite:
+Primera version con flujo interactivo para `DeepSeek` y `Qwen` usando catalogo SQLite:
 
 - seleccion de proveedor
-- modelo fijo `Qwen Coder`
+- seleccion de modelo segun proveedor
 - seleccion de tipo de conexion `OAuth` o `Token`
 - uso de `base_url` almacenada en el proveedor
 - soporte para `Qwen OAuth` abriendo `qwen.ai`
+- soporte para `DeepSeek` por `API key`
+- activacion directa de DeepSeek sobre su endpoint Anthropic oficial, sin gateway local
+- edicion y eliminacion de conexiones guardadas
+- guardado local opcional de API keys para perfiles por token
 - generacion de perfil local reutilizable
 - descubrimiento automatico de la configuracion de Claude en Linux y Windows
 - activacion reversible sobre el `settings.json` real detectado
@@ -34,6 +38,12 @@ Los perfiles, tokens y estado interno se guardan en el directorio detectado de C
 Linux: ~/.claude-connect
 Windows: %APPDATA%\claude-connect
 ```
+
+Importante:
+
+- el repo versiona solo el catalogo SQLite en `storage/claude-connect.sqlite`
+- los perfiles, tokens OAuth, API keys y estado del gateway viven fuera del repo, en el directorio local de cada usuario
+- cada persona que descargue el proyecto maneja su propia configuracion y sus propias credenciales
 
 El catalogo SQLite se crea en:
 
@@ -60,6 +70,7 @@ Luego espera la aprobacion y guarda el token dentro de la ruta detectada de Clau
 El menu principal ahora permite:
 
 - activar un perfil guardado sobre Claude Code
+- editar o eliminar conexiones guardadas
 - ver el estado actual del switch
 - revertir y restaurar tu `settings.json` original detectado automaticamente
 

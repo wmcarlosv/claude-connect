@@ -17,6 +17,7 @@ import { resolveClaudeConnectPaths } from '../lib/app-paths.js';
 import { readSwitchState } from '../lib/claude-settings.js';
 import { readOAuthToken, refreshOAuthToken } from '../lib/oauth.js';
 import { readProfileFile } from '../lib/profile.js';
+import { readManagedTokenSecret } from '../lib/secrets.js';
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const cliEntryPath = path.join(projectRoot, 'bin', 'claude-connect.js');
@@ -102,10 +103,15 @@ async function resolveGatewayContext() {
 
   if (authMethod === 'token') {
     const envVar = profile?.auth?.envVar;
-    const token = typeof envVar === 'string' ? process.env[envVar] : '';
+    let token = typeof envVar === 'string' ? process.env[envVar] : '';
+
+    if ((!token || token.trim().length === 0) && typeof profile?.auth?.secretFile === 'string') {
+      const secret = await readManagedTokenSecret(profile.auth.secretFile);
+      token = typeof secret?.token === 'string' ? secret.token : '';
+    }
 
     if (typeof token !== 'string' || token.trim().length === 0) {
-      throw new Error(`Falta la variable de entorno ${envVar} para usar este perfil.`);
+      throw new Error(`Falta la variable de entorno ${envVar} y tampoco hay una API key guardada para este perfil.`);
     }
 
     return {
@@ -390,6 +396,15 @@ export async function startGatewayInBackground() {
     if (!isProcessAlive(child.pid)) {
       break;
     }
+  }
+
+  const adoptedStatus = await getGatewayStatus({ timeoutMs: 700 });
+
+  if (adoptedStatus.active) {
+    return {
+      ...adoptedStatus,
+      alreadyRunning: true
+    };
   }
 
   await writeGatewayState({

@@ -58,56 +58,100 @@ CREATE TABLE IF NOT EXISTS provider_oauth_configs (
 );
 `;
 
-const seedProvider = {
-  id: 'qwen',
-  name: 'Qwen',
-  vendor: 'Qwen',
-  description: 'Qwen Code con OAuth propio de qwen.ai y modo token compatible con OpenAI.',
-  docsUrl: 'https://github.com/QwenLM/qwen-code',
-  docsVerifiedAt: '2026-03-31',
-  baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-  defaultModelId: 'qwen3-coder-plus',
-  defaultAuthMethodId: 'token',
-  defaultApiKeyEnvVar: 'DASHSCOPE_API_KEY',
-  models: [
-    {
-      id: 'qwen3-coder-plus',
-      name: 'Qwen Coder',
-      category: 'Coding',
-      contextWindow: 'Auto',
-      summary: 'Modelo fijo para esta primera version, siguiendo el flujo de Qwen Code.',
-      sortOrder: 1,
-      isDefault: 1
+const seedProviders = [
+  {
+    id: 'deepseek',
+    name: 'DeepSeek',
+    vendor: 'DeepSeek',
+    description: 'DeepSeek API compatible con OpenAI usando API key y modelos chat/reasoner.',
+    docsUrl: 'https://api-docs.deepseek.com/',
+    docsVerifiedAt: '2026-03-31',
+    baseUrl: 'https://api.deepseek.com',
+    defaultModelId: 'deepseek-chat',
+    defaultAuthMethodId: 'token',
+    defaultApiKeyEnvVar: 'DEEPSEEK_API_KEY',
+    models: [
+      {
+        id: 'deepseek-chat',
+        name: 'DeepSeek Chat',
+        category: 'General',
+        contextWindow: '128K',
+        summary: 'Modo no razonador de DeepSeek V3.2, apto como opcion base para Claude Code.',
+        sortOrder: 1,
+        isDefault: 1
+      },
+      {
+        id: 'deepseek-reasoner',
+        name: 'DeepSeek Reasoner',
+        category: 'Reasoning',
+        contextWindow: '128K',
+        summary: 'Modo razonador de DeepSeek V3.2 con soporte de Tool Calls segun la documentacion oficial.',
+        sortOrder: 2,
+        isDefault: 0
+      }
+    ],
+    authMethods: [
+      {
+        id: 'token',
+        name: 'Token',
+        description: 'Conexion por API key contra el endpoint compatible con OpenAI del proveedor.',
+        credentialKind: 'env_var',
+        sortOrder: 1,
+        isDefault: 1
+      }
+    ]
+  },
+  {
+    id: 'qwen',
+    name: 'Qwen',
+    vendor: 'Qwen',
+    description: 'Qwen Code con OAuth propio de qwen.ai y modo token compatible con OpenAI.',
+    docsUrl: 'https://github.com/QwenLM/qwen-code',
+    docsVerifiedAt: '2026-03-31',
+    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    defaultModelId: 'qwen3-coder-plus',
+    defaultAuthMethodId: 'token',
+    defaultApiKeyEnvVar: 'DASHSCOPE_API_KEY',
+    models: [
+      {
+        id: 'qwen3-coder-plus',
+        name: 'Qwen Coder',
+        category: 'Coding',
+        contextWindow: 'Auto',
+        summary: 'Modelo fijo para esta primera version, siguiendo el flujo de Qwen Code.',
+        sortOrder: 1,
+        isDefault: 1
+      }
+    ],
+    authMethods: [
+      {
+        id: 'token',
+        name: 'Token',
+        description: 'Conexion por API key contra el endpoint compatible con OpenAI del proveedor.',
+        credentialKind: 'env_var',
+        sortOrder: 1,
+        isDefault: 1
+      },
+      {
+        id: 'oauth',
+        name: 'OAuth',
+        description: 'Login de Qwen Code mediante device flow en qwen.ai.',
+        credentialKind: 'oauth',
+        sortOrder: 2,
+        isDefault: 0
+      }
+    ],
+    oauth: {
+      authorizeUrl: 'https://chat.qwen.ai/api/v1/oauth2/device/code',
+      tokenUrl: 'https://chat.qwen.ai/api/v1/oauth2/token',
+      callbackUrl: 'https://chat.qwen.ai/auth',
+      accessType: 'device_code',
+      scope: 'openid profile email model.completion',
+      clientId: 'f0304373b74a44d2b584a3fb70ca9e56',
+      appSecretId: ''
     }
-  ],
-  authMethods: [
-    {
-      id: 'token',
-      name: 'Token',
-      description: 'Conexion por API key / token contra el endpoint compatible con OpenAI.',
-      credentialKind: 'env_var',
-      sortOrder: 1,
-      isDefault: 1
-    },
-    {
-      id: 'oauth',
-      name: 'OAuth',
-      description: 'Login de Qwen Code mediante device flow en qwen.ai.',
-      credentialKind: 'oauth',
-      sortOrder: 2,
-      isDefault: 0
-    }
-  ],
-  oauth: {
-    authorizeUrl: 'https://chat.qwen.ai/api/v1/oauth2/device/code',
-    tokenUrl: 'https://chat.qwen.ai/api/v1/oauth2/token',
-    callbackUrl: 'https://chat.qwen.ai/auth',
-    accessType: 'device_code',
-    scope: 'openid profile email model.completion',
-    clientId: 'f0304373b74a44d2b584a3fb70ca9e56',
-    appSecretId: ''
   }
-};
+];
 
 function seedCatalog(db) {
   const insertProvider = db.prepare(`
@@ -178,61 +222,67 @@ function seedCatalog(db) {
   db.exec('BEGIN');
 
   try {
-    db.prepare('DELETE FROM models WHERE provider_id = ?').run(seedProvider.id);
-    db.prepare('DELETE FROM provider_auth_methods WHERE provider_id = ?').run(seedProvider.id);
+    for (const seedProvider of seedProviders) {
+      db.prepare('DELETE FROM models WHERE provider_id = ?').run(seedProvider.id);
+      db.prepare('DELETE FROM provider_auth_methods WHERE provider_id = ?').run(seedProvider.id);
 
-    insertProvider.run(
-      seedProvider.id,
-      seedProvider.name,
-      seedProvider.vendor,
-      seedProvider.description,
-      seedProvider.docsUrl,
-      seedProvider.docsVerifiedAt,
-      seedProvider.baseUrl,
-      seedProvider.defaultModelId,
-      seedProvider.defaultAuthMethodId,
-      seedProvider.defaultApiKeyEnvVar
-    );
-
-    for (const model of seedProvider.models) {
-      insertModel.run(
-        model.id,
+      insertProvider.run(
         seedProvider.id,
-        model.name,
-        model.category,
-        model.contextWindow,
-        model.summary,
-        model.sortOrder,
-        model.isDefault
+        seedProvider.name,
+        seedProvider.vendor,
+        seedProvider.description,
+        seedProvider.docsUrl,
+        seedProvider.docsVerifiedAt,
+        seedProvider.baseUrl,
+        seedProvider.defaultModelId,
+        seedProvider.defaultAuthMethodId,
+        seedProvider.defaultApiKeyEnvVar
       );
+
+      for (const model of seedProvider.models) {
+        insertModel.run(
+          model.id,
+          seedProvider.id,
+          model.name,
+          model.category,
+          model.contextWindow,
+          model.summary,
+          model.sortOrder,
+          model.isDefault
+        );
+      }
+
+      for (const authMethod of seedProvider.authMethods) {
+        insertAuthMethod.run(
+          authMethod.id,
+          authMethod.name,
+          authMethod.description,
+          authMethod.credentialKind
+        );
+
+        insertProviderAuthMethod.run(
+          seedProvider.id,
+          authMethod.id,
+          authMethod.sortOrder,
+          authMethod.isDefault
+        );
+      }
+
+      if (seedProvider.oauth) {
+        insertOAuthConfig.run(
+          seedProvider.id,
+          seedProvider.oauth.authorizeUrl,
+          seedProvider.oauth.tokenUrl,
+          seedProvider.oauth.callbackUrl,
+          seedProvider.oauth.accessType,
+          seedProvider.oauth.scope,
+          seedProvider.oauth.clientId,
+          seedProvider.oauth.appSecretId
+        );
+      } else {
+        db.prepare('DELETE FROM provider_oauth_configs WHERE provider_id = ?').run(seedProvider.id);
+      }
     }
-
-    for (const authMethod of seedProvider.authMethods) {
-      insertAuthMethod.run(
-        authMethod.id,
-        authMethod.name,
-        authMethod.description,
-        authMethod.credentialKind
-      );
-
-      insertProviderAuthMethod.run(
-        seedProvider.id,
-        authMethod.id,
-        authMethod.sortOrder,
-        authMethod.isDefault
-      );
-    }
-
-    insertOAuthConfig.run(
-      seedProvider.id,
-      seedProvider.oauth.authorizeUrl,
-      seedProvider.oauth.tokenUrl,
-      seedProvider.oauth.callbackUrl,
-      seedProvider.oauth.accessType,
-      seedProvider.oauth.scope,
-      seedProvider.oauth.clientId,
-      seedProvider.oauth.appSecretId
-    );
 
     db.exec('COMMIT');
   } catch (error) {

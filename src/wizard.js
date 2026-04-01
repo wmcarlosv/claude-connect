@@ -8,7 +8,15 @@ import { gatewayBaseUrl } from './gateway/constants.js';
 import { getGatewayStatus } from './gateway/state.js';
 import { startGatewayInBackground, stopGateway } from './gateway/server.js';
 import { runOAuthAuthorization, saveOAuthToken } from './lib/oauth.js';
-import { buildProfile, listProfiles, saveProfile, slugifyProfileName } from './lib/profile.js';
+import {
+  buildProfile,
+  deleteProfileFile,
+  listProfiles,
+  saveProfile,
+  slugifyProfileName,
+  updateProfileFile
+} from './lib/profile.js';
+import { deleteManagedTokenSecret, saveManagedTokenSecret } from './lib/secrets.js';
 import {
   assertInteractiveTerminal,
   buildFrame,
@@ -32,6 +40,11 @@ function mainMenuItems() {
       label: 'Activar en Claude',
       description: 'Aplica un perfil a Claude Code y arranca el gateway local.',
       value: 'activate'
+    },
+    {
+      label: 'Gestionar conexiones',
+      description: 'Editar o eliminar perfiles ya creados.',
+      value: 'manage'
     },
     {
       label: 'Estado gateway',
@@ -98,6 +111,31 @@ function profileItems(profiles) {
   }));
 }
 
+function profileActionItems(profile) {
+  const items = [];
+
+  if (profile.auth.method === 'token' || profile.auth.method === 'api_key') {
+    items.push({
+      label: 'Editar conexion',
+      description: 'Guardar o actualizar la API key localmente.',
+      value: 'edit-token'
+    });
+  }
+
+  items.push({
+    label: 'Eliminar conexion',
+    description: 'Borra el perfil y sus secretos administrados por Claude Connect.',
+    value: 'delete'
+  });
+  items.push({
+    label: 'Volver',
+    description: 'Regresa al menu principal.',
+    value: 'back'
+  });
+
+  return items;
+}
+
 function renderInfoScreen({ title, subtitle, lines, footer }) {
   renderScreen(
     buildFrame({
@@ -119,12 +157,12 @@ function renderWelcome() {
       body: [
         colorize('Experiencia inicial', colors.bold, colors.accentSoft),
         colorize('1. Elegir proveedor desde la base local', colors.soft),
-        colorize('2. Elegir tipo de conexion: OAuth o Token', colors.soft),
-        colorize('3. Si eliges OAuth, se abre qwen.ai automaticamente', colors.soft),
-        colorize('4. Guardar perfil y token localmente', colors.soft),
+        colorize('2. Elegir modelo y tipo de conexion', colors.soft),
+        colorize('3. Si el proveedor soporta OAuth, se abre el login oficial', colors.soft),
+        colorize('4. Guardar perfil y credenciales locales', colors.soft),
         '',
         colorize('Catalogo actual', colors.bold, colors.accentSoft),
-        colorize('Qwen ya viene almacenado en SQLite con el modelo fijo Qwen Coder.', colors.soft),
+        colorize('DeepSeek y Qwen ya vienen almacenados en SQLite.', colors.soft),
         '',
         colorize('Seguridad', colors.bold, colors.accentSoft),
         colorize('El token OAuth se guarda localmente y el modo Token usa una variable de entorno.', colors.soft)
@@ -137,7 +175,12 @@ function renderWelcome() {
 function renderSummary({ profile, filePath }) {
   const authSummary = profile.auth.method === 'oauth'
     ? `Auth: oauth con token en ${profile.auth.oauth.tokenFile}`
-    : `Auth: ${profile.auth.method} mediante ${profile.auth.envVar}`;
+    : `Auth: ${profile.auth.method} con fallback en ${profile.auth.envVar}`;
+  const managedSecretSummary = profile.auth.method !== 'oauth' && profile.auth.secretFile
+    ? colorize(`API key administrada en: ${profile.auth.secretFile}`, colors.soft)
+    : profile.auth.method !== 'oauth'
+      ? colorize(`API key no guardada localmente. Si existe ${profile.auth.envVar}, tambien se usara.`, colors.soft)
+      : null;
 
   renderScreen(
     buildFrame({
@@ -151,6 +194,7 @@ function renderSummary({ profile, filePath }) {
         colorize(`Modelo: ${profile.model.name}`, colors.soft),
         colorize(`Base URL: ${profile.endpoint.baseUrl}`, colors.soft),
         colorize(authSummary, colors.soft),
+        ...(managedSecretSummary ? [managedSecretSummary] : []),
         '',
         colorize('Archivo generado', colors.bold, colors.accentSoft),
         colorize(filePath, colors.soft),
@@ -163,9 +207,10 @@ function renderSummary({ profile, filePath }) {
               colorize('El access token y refresh token ya quedaron guardados localmente.', colors.soft)
             ]
           : [
-              colorize(`export ${profile.auth.envVar}=<tu_token>`, colors.soft),
+              colorize(`Fallback opcional: export ${profile.auth.envVar}=<tu_token>`, colors.soft),
               colorize(`export OPENAI_BASE_URL=${profile.endpoint.baseUrl}`, colors.soft),
-              colorize(`export OPENAI_MODEL=${profile.model.id}`, colors.soft)
+              colorize(`export OPENAI_MODEL=${profile.model.id}`, colors.soft),
+              colorize('Tambien puedes guardar la API key directamente en Claude Connect.', colors.soft)
             ])
       ],
       footer: [colorize('Presiona cualquier tecla para salir', colors.dim, colors.muted)]
@@ -200,7 +245,7 @@ async function showCatalog(store) {
       colorize(`Base URL: ${catalog.baseUrl}`, colors.soft),
       colorize(`Auth: ${catalog.authMethods.map((item) => item.name).join(', ')}`, colors.soft),
       '',
-      colorize('Modelo fijo', colors.bold, colors.accentSoft),
+      colorize('Modelos', colors.bold, colors.accentSoft),
       ...catalog.models.map((model) => colorize(`${model.name} · ${model.summary}`, colors.soft))
     ],
     footer: 'Presiona una tecla para volver'
@@ -216,6 +261,7 @@ async function showClaudeStatus() {
     colorize(`Activo: ${status.active ? 'si' : 'no'}`, colors.bold, colors.text),
     colorize(`Model actual: ${status.currentModel ?? 'sin definir'}`, colors.soft),
     colorize(`ANTHROPIC_BASE_URL: ${status.anthropicBaseUrl ?? 'sin definir'}`, colors.soft),
+    colorize(`Modo de conexion: ${status.connectionMode ?? 'sin definir'}`, colors.soft),
     colorize(`Perfil activo: ${status.profileName ?? 'ninguno'}`, colors.soft),
     colorize(`Snapshot original: ${status.hasOriginalSnapshot ? 'disponible' : 'no'}`, colors.soft),
     '',
@@ -286,31 +332,167 @@ async function activateClaudeFromSavedProfile() {
       `Auth: ${selected.value.auth.method}`,
       selected.value.auth.method === 'oauth'
         ? `Token file: ${selected.value.auth.oauth?.tokenFile ?? 'no encontrado'}`
-        : `Env var: ${selected.value.auth.envVar}`
+        : `${selected.value.auth.secretFile ? 'API key guardada' : 'sin API key guardada'} · fallback: ${selected.value.auth.envVar}`
     ]
   });
 
   const result = await activateClaudeProfile({ profile });
-  const gateway = await startGatewayInBackground();
+  const gateway = result.connectionMode === 'gateway'
+    ? await startGatewayInBackground()
+    : null;
 
   renderInfoScreen({
     title: 'Claude Code actualizado',
-    subtitle: 'El switch quedo aplicado y el gateway local ya fue iniciado.',
+    subtitle: result.connectionMode === 'gateway'
+      ? 'El switch quedo aplicado y el gateway local ya fue iniciado.'
+      : 'El switch quedo aplicado usando una conexion Anthropic directa.',
     lines: [
       colorize(`Perfil activo: ${profile.profileName}`, colors.soft),
       colorize(`Modelo configurado: ${profile.model.id}`, colors.soft),
-      colorize(`Gateway configurado: ${result.gatewayBaseUrl}`, colors.soft),
-      colorize(`Gateway activo en PID: ${gateway.pid ?? 'sin PID'}`, colors.soft),
+      colorize(`Modo: ${result.connectionMode}`, colors.soft),
+      colorize(
+        result.connectionMode === 'gateway'
+          ? `Gateway configurado: ${result.gatewayBaseUrl}`
+          : `Endpoint directo: ${result.connectionBaseUrl}`,
+        colors.soft
+      ),
+      ...(gateway ? [colorize(`Gateway activo en PID: ${gateway.pid ?? 'sin PID'}`, colors.soft)] : []),
       colorize(`Settings: ${result.claudeSettingsPath}`, colors.soft),
       colorize(`Estado del switch: ${result.stateFilePath}`, colors.soft),
       '',
       colorize('Listo para usar', colors.bold, colors.accentSoft),
-      colorize('Claude Code ya puede hablar con el gateway local en esa URL.', colors.soft)
+      colorize(
+        result.connectionMode === 'gateway'
+          ? 'Claude Code ya puede hablar con el gateway local en esa URL.'
+          : 'Claude Code ya puede hablar directamente con la API Anthropic de DeepSeek.',
+        colors.soft
+      )
     ],
     footer: 'Presiona una tecla para volver'
   });
 
   await waitForAnyKey();
+}
+
+async function editTokenProfile(profile) {
+  const apiKey = await promptText({
+    step: 1,
+    totalSteps: 1,
+    title: 'Guardar API key',
+    subtitle: `Perfil: ${profile.profileName}. Deja vacio para conservar la API key ya guardada.`,
+    label: 'API key',
+    placeholder: profile.auth.secretFile ? 'Deja vacio para conservar la API key guardada' : 'Pega aqui tu API key',
+    secret: true
+  });
+
+  const nextProfile = structuredClone(profile);
+  nextProfile.auth.method = profile.auth.method === 'api_key' ? 'token' : profile.auth.method;
+  nextProfile.auth.envVar = nextProfile.auth.envVar || `${nextProfile.provider.id.toUpperCase()}_API_KEY`;
+  nextProfile.updatedAt = new Date().toISOString();
+
+  if (apiKey.trim().length > 0) {
+    nextProfile.auth.secretFile = await saveManagedTokenSecret({
+      profileName: nextProfile.profileName,
+      providerId: nextProfile.provider.id,
+      modelId: nextProfile.model.id,
+      envVar: nextProfile.auth.envVar,
+      token: apiKey.trim()
+    });
+  }
+
+  await updateProfileFile(profile.filePath, nextProfile);
+
+  renderInfoScreen({
+    title: 'Conexion actualizada',
+    subtitle: 'El perfil ya quedo editado.',
+    lines: [
+      colorize(`Perfil: ${nextProfile.profileName}`, colors.soft),
+      colorize(`Fallback por entorno: ${nextProfile.auth.envVar}`, colors.soft),
+      colorize(
+        nextProfile.auth.secretFile
+          ? `API key guardada en: ${nextProfile.auth.secretFile}`
+          : 'No se guardo una API key administrada localmente.',
+        colors.soft
+      )
+    ],
+    footer: 'Presiona una tecla para volver'
+  });
+
+  await waitForAnyKey();
+}
+
+async function deleteSavedProfile(profile) {
+  await deleteProfileFile(profile.filePath);
+
+  if (typeof profile.auth?.secretFile === 'string') {
+    await deleteManagedTokenSecret(profile.auth.secretFile);
+  }
+
+  if (typeof profile.auth?.oauth?.tokenFile === 'string') {
+    await deleteManagedTokenSecret(profile.auth.oauth.tokenFile);
+  }
+
+  renderInfoScreen({
+    title: 'Conexion eliminada',
+    subtitle: 'El perfil ya no aparece en Claude Connect.',
+    lines: [
+      colorize(`Perfil: ${profile.profileName}`, colors.soft),
+      colorize(`Archivo eliminado: ${profile.filePath}`, colors.soft)
+    ],
+    footer: 'Presiona una tecla para volver'
+  });
+
+  await waitForAnyKey();
+}
+
+async function manageSavedProfiles() {
+  const profiles = await listProfiles();
+
+  if (profiles.length === 0) {
+    renderInfoScreen({
+      title: 'Sin conexiones',
+      subtitle: 'Todavia no hay perfiles guardados para editar o eliminar.',
+      lines: [
+        colorize('Primero crea una conexion nueva.', colors.soft)
+      ],
+      footer: 'Presiona una tecla para volver'
+    });
+    await waitForAnyKey();
+    return;
+  }
+
+  const profile = await selectFromList({
+    step: 1,
+    totalSteps: 2,
+    title: 'Gestionar conexiones',
+    subtitle: 'Selecciona la conexion que quieres modificar.',
+    items: profileItems(profiles),
+    detailBuilder: (selected) => [
+      `Proveedor: ${selected.value.provider.name}`,
+      `Modelo: ${selected.value.model.name}`,
+      `Auth: ${selected.value.auth.method}`,
+      selected.value.auth.method === 'oauth'
+        ? `Token file: ${selected.value.auth.oauth?.tokenFile ?? 'no encontrado'}`
+        : `${selected.value.auth.secretFile ? 'API key guardada' : 'sin API key guardada'} · fallback: ${selected.value.auth.envVar}`
+    ]
+  });
+
+  const action = await selectFromList({
+    step: 2,
+    totalSteps: 2,
+    title: 'Accion sobre la conexion',
+    subtitle: `Perfil: ${profile.profileName}.`,
+    items: profileActionItems(profile),
+    detailBuilder: (selected) => [selected.description]
+  });
+
+  if (action === 'edit-token') {
+    await editTokenProfile(profile);
+  }
+
+  if (action === 'delete') {
+    await deleteSavedProfile(profile);
+  }
 }
 
 async function stopGatewayFromMenu() {
@@ -348,6 +530,148 @@ async function revertClaudeSwitch() {
   await waitForAnyKey();
 }
 
+async function createNewConnection(store) {
+  const providers = store.getProviders();
+  const provider = await selectFromList({
+    step: 1,
+    totalSteps: 3,
+    title: 'Selecciona el proveedor',
+    subtitle: 'El proveedor guarda su base_url directamente en SQLite.',
+    items: providerItems(providers),
+    detailBuilder: (selected) => [
+      `Vendor: ${selected.value.vendor}`,
+      `Base URL: ${selected.value.baseUrl}`,
+      `Modelos: ${selected.value.modelCount}`,
+      `Docs verificadas: ${selected.value.docsVerifiedAt}`
+    ]
+  });
+
+  const catalog = store.getProviderCatalog(provider.id);
+  const totalSteps = catalog.models.length > 1 ? 3 : 2;
+  let model = catalog.models[0];
+
+  let authMethod = catalog.authMethods[0];
+  let oauthSession;
+
+  if (catalog.models.length > 1) {
+    model = await selectFromList({
+      step: 2,
+      totalSteps,
+      title: 'Selecciona el modelo',
+      subtitle: `Proveedor: ${catalog.name}.`,
+      items: modelItems(catalog.models),
+      detailBuilder: (selected) => [
+        `Modelo: ${selected.value.id}`,
+        `Categoria: ${selected.value.category}`,
+        `Contexto: ${selected.value.contextWindow}`,
+        selected.value.summary
+      ]
+    });
+  }
+
+  authMethod = await selectFromList({
+    step: totalSteps,
+    totalSteps,
+    title: 'Tipo de conexion',
+    subtitle: `${catalog.name} usara el modelo ${model.name}.`,
+    items: authItems(catalog.authMethods),
+    detailBuilder: (selected) => [
+      `Metodo: ${selected.value.name}`,
+      selected.value.description,
+      selected.value.id === 'oauth' && catalog.oauth
+        ? `Se abrira: ${catalog.oauth.browserAuthUrl}?user_code=...&client=qwen-code`
+        : `Base URL: ${catalog.baseUrl}`
+    ]
+  });
+
+  const profileName = slugifyProfileName(`${provider.id}-${model.id}-${authMethod.id}`);
+  const apiKeyEnvVar = catalog.defaultApiKeyEnvVar;
+  let managedSecretFile = '';
+
+  if (authMethod.id === 'token') {
+    const apiKeyValue = await promptText({
+      step: totalSteps,
+      totalSteps,
+      title: 'API key del proveedor',
+      subtitle: `Modelo: ${model.name}. Puedes guardarla ahora o hacerlo luego en Gestionar conexiones.`,
+      label: 'API key',
+      placeholder: 'Pega aqui tu API key o deja vacio',
+      secret: true
+    });
+
+    if (apiKeyValue.trim().length > 0) {
+      managedSecretFile = await saveManagedTokenSecret({
+        profileName,
+        providerId: catalog.id,
+        modelId: model.id,
+        envVar: apiKeyEnvVar,
+        token: apiKeyValue.trim()
+      });
+    }
+  }
+
+  if (authMethod.id === 'oauth') {
+    const renderOAuthStatus = ({ title, subtitle, lines }) => {
+      renderInfoScreen({
+        title,
+        subtitle,
+        lines: lines.map((line) => colorize(line, colors.soft)),
+        footer: 'Completa el flujo en el navegador o vuelve a la terminal'
+      });
+    };
+
+    const { authUrl, tokenPayload } = await runOAuthAuthorization({
+      providerName: catalog.name,
+      oauthConfig: catalog.oauth,
+      statusRenderer: renderOAuthStatus
+    });
+
+    const tokenFile = await saveOAuthToken({
+      profileName,
+      providerId: catalog.id,
+      tokenPayload
+    });
+
+    renderInfoScreen({
+      title: 'OAuth guardado',
+      subtitle: 'La consola ya recibio la aprobacion de Qwen y guardo el token.',
+      lines: [
+        colorize(`URL usada: ${authUrl}`, colors.soft),
+        colorize(`Token guardado en: ${tokenFile}`, colors.soft),
+        colorize('Ahora se generara el perfil local.', colors.soft)
+      ],
+      footer: 'Presiona una tecla para continuar'
+    });
+    await waitForAnyKey();
+
+    oauthSession = {
+      clientId: catalog.oauth.clientId,
+      authUrl,
+      deviceCodeUrl: catalog.oauth.deviceCodeUrl,
+      tokenUrl: catalog.oauth.tokenUrl,
+      tokenFile,
+      apiBaseUrl: 'https://portal.qwen.ai/v1'
+    };
+  }
+
+  const profile = buildProfile({
+    provider: catalog,
+    model,
+    authMethod,
+    profileName,
+    apiKeyEnvVar,
+    oauthSession
+  });
+
+  if (managedSecretFile) {
+    profile.auth.secretFile = managedSecretFile;
+  }
+
+  const filePath = await saveProfile(profile);
+  renderSummary({ profile, filePath });
+  await waitForAnyKey();
+}
+
 export async function runWizard() {
   assertInteractiveTerminal();
   openAppScreen();
@@ -358,17 +682,8 @@ export async function runWizard() {
     renderWelcome();
     await waitForAnyKey();
 
-    let action = 'status';
-
-    while (
-      action === 'catalog'
-      || action === 'status'
-      || action === 'activate'
-      || action === 'gateway-status'
-      || action === 'gateway-stop'
-      || action === 'revert'
-    ) {
-      action = await selectFromList({
+    while (true) {
+      const action = await selectFromList({
         step: 1,
         totalSteps: 1,
         title: 'Menu principal',
@@ -385,12 +700,20 @@ export async function runWizard() {
         await showCatalog(store);
       }
 
+      if (action === 'new') {
+        await createNewConnection(store);
+      }
+
       if (action === 'status') {
         await showClaudeStatus();
       }
 
       if (action === 'activate') {
         await activateClaudeFromSavedProfile();
+      }
+
+      if (action === 'manage') {
+        await manageSavedProfiles();
       }
 
       if (action === 'gateway-status') {
@@ -405,114 +728,6 @@ export async function runWizard() {
         await revertClaudeSwitch();
       }
     }
-
-    const providers = store.getProviders();
-    const provider = await selectFromList({
-      step: 1,
-      totalSteps: 2,
-      title: 'Selecciona el proveedor',
-      subtitle: 'El proveedor guarda su base_url directamente en SQLite.',
-      items: providerItems(providers),
-      detailBuilder: (selected) => [
-        `Vendor: ${selected.value.vendor}`,
-        `Base URL: ${selected.value.baseUrl}`,
-        `Modelos: ${selected.value.modelCount}`,
-        `Docs verificadas: ${selected.value.docsVerifiedAt}`
-      ]
-    });
-
-    const catalog = store.getProviderCatalog(provider.id);
-    const model = catalog.models[0];
-
-    let authMethod = catalog.authMethods[0];
-    let oauthSession;
-
-    authMethod = await selectFromList({
-      step: 2,
-      totalSteps: 2,
-      title: 'Tipo de conexion',
-      subtitle: `Qwen usara siempre el modelo ${model.name}.`,
-      items: authItems(catalog.authMethods),
-      detailBuilder: (selected) => [
-        `Metodo: ${selected.value.name}`,
-        selected.value.description,
-        selected.value.id === 'oauth' && catalog.oauth
-          ? `Se abrira: ${catalog.oauth.browserAuthUrl}?user_code=...&client=qwen-code`
-          : `Base URL: ${catalog.baseUrl}`
-      ]
-    });
-
-    const profileName = slugifyProfileName(`${provider.id}-${model.id}-${authMethod.id}`);
-    let apiKeyEnvVar = '';
-
-    if (authMethod.id === 'token') {
-      apiKeyEnvVar = await promptText({
-        step: 2,
-        totalSteps: 2,
-        title: 'Variable de entorno para el token',
-        subtitle: `Modelo fijo: ${model.name}. Se guardara solo la referencia a la variable.`,
-        label: 'Nombre de la variable',
-        defaultValue: catalog.defaultApiKeyEnvVar,
-        placeholder: 'DASHSCOPE_API_KEY'
-      });
-    }
-
-    if (authMethod.id === 'oauth') {
-      const renderOAuthStatus = ({ title, subtitle, lines }) => {
-        renderInfoScreen({
-          title,
-          subtitle,
-          lines: lines.map((line) => colorize(line, colors.soft)),
-          footer: 'Completa el flujo en el navegador o vuelve a la terminal'
-        });
-      };
-
-      const { authUrl, tokenPayload } = await runOAuthAuthorization({
-        providerName: catalog.name,
-        oauthConfig: catalog.oauth,
-        statusRenderer: renderOAuthStatus
-      });
-
-      const tokenFile = await saveOAuthToken({
-        profileName,
-        providerId: catalog.id,
-        tokenPayload
-      });
-
-      renderInfoScreen({
-        title: 'OAuth guardado',
-        subtitle: 'La consola ya recibio la aprobacion de Qwen y guardo el token.',
-        lines: [
-          colorize(`URL usada: ${authUrl}`, colors.soft),
-          colorize(`Token guardado en: ${tokenFile}`, colors.soft),
-          colorize('Ahora se generara el perfil local.', colors.soft)
-        ],
-        footer: 'Presiona una tecla para continuar'
-      });
-      await waitForAnyKey();
-
-      oauthSession = {
-        clientId: catalog.oauth.clientId,
-        authUrl,
-        deviceCodeUrl: catalog.oauth.deviceCodeUrl,
-        tokenUrl: catalog.oauth.tokenUrl,
-        tokenFile,
-        apiBaseUrl: 'https://portal.qwen.ai/v1'
-      };
-    }
-
-    const profile = buildProfile({
-      provider: catalog,
-      model,
-      authMethod,
-      profileName,
-      apiKeyEnvVar,
-      oauthSession
-    });
-
-    const filePath = await saveProfile(profile);
-    renderSummary({ profile, filePath });
-    await waitForAnyKey();
   } finally {
     closeAppScreen();
   }

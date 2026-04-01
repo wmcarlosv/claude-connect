@@ -1,8 +1,11 @@
 node_modules/
 .DS_Store
-storage/
+storage/*
+!storage/claude-connect.sqlite
 coverage/
 .env
 npm-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+.codex
+.codex/

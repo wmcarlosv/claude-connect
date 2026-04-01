@@ -74,10 +74,10 @@ export async function getGatewayStatus({ timeoutMs = 700 } = {}) {
   const state = await readGatewayState();
   const pid = Number(state?.pid ?? 0);
   const processAlive = isProcessAlive(pid);
-  const health = processAlive ? await probeGatewayHealth(timeoutMs) : null;
+  const health = await probeGatewayHealth(timeoutMs);
 
   return {
-    active: Boolean(processAlive && health),
+    active: Boolean(health),
     pid: processAlive ? pid : null,
     baseUrl: gatewayBaseUrl,
     logPath: gatewayLogPath,

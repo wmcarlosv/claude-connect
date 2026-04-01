@@ -65,6 +65,14 @@ export async function readProfileFile(filePath) {
   return JSON.parse(raw);
 }
 
+export async function updateProfileFile(filePath, profile) {
+  await fs.writeFile(filePath, `${JSON.stringify(profile, null, 2)}\n`, { mode: 0o600 });
+}
+
+export async function deleteProfileFile(filePath) {
+  await fs.unlink(filePath);
+}
+
 export async function listProfiles() {
   const { profilesDir: configDir } = await resolveClaudeConnectPaths();
 

@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { resolveClaudePaths } from './app-paths.js';
+import { readManagedTokenSecret } from './secrets.js';
 
 function isObject(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -37,19 +38,67 @@ export async function readSwitchState() {
   return isObject(state) ? state : null;
 }
 
-export function buildClaudeSettingsForProfile({ baseSettings, profile, gatewayBaseUrl }) {
+async function resolveTokenValueForProfile(profile) {
+  const envVar = profile?.auth?.envVar;
+  const envToken = typeof envVar === 'string' ? process.env[envVar] : '';
+
+  if (typeof envToken === 'string' && envToken.trim().length > 0) {
+    return envToken.trim();
+  }
+
+  if (typeof profile?.auth?.secretFile === 'string') {
+    const secret = await readManagedTokenSecret(profile.auth.secretFile);
+    const secretToken = typeof secret?.token === 'string' ? secret.token : '';
+
+    if (secretToken.trim().length > 0) {
+      return secretToken.trim();
+    }
+  }
+
+  throw new Error(`Falta la API key para ${profile.provider.name}. Guarda la API key en la conexion o exporta ${envVar}.`);
+}
+
+async function resolveClaudeTransportForProfile({ profile, gatewayBaseUrl }) {
+  const authMethod = profile.auth.method === 'api_key' ? 'token' : profile.auth.method;
+
+  if (profile.provider.id === 'deepseek' && authMethod === 'token') {
+    return {
+      connectionMode: 'direct',
+      connectionBaseUrl: 'https://api.deepseek.com/anthropic',
+      authToken: await resolveTokenValueForProfile(profile)
+    };
+  }
+
+  return {
+    connectionMode: 'gateway',
+    connectionBaseUrl: gatewayBaseUrl,
+    authToken: 'claude-connect-local'
+  };
+}
+
+export function buildClaudeSettingsForProfile({ baseSettings, profile, connectionBaseUrl, authToken, connectionMode }) {
   const next = structuredClone(baseSettings);
   const env = isObject(next.env) ? { ...next.env } : {};
   const authMethod = profile.auth.method === 'api_key' ? 'token' : profile.auth.method;
 
   next.model = profile.model.id;
-  env.ANTHROPIC_BASE_URL = gatewayBaseUrl;
-  env.ANTHROPIC_AUTH_TOKEN = 'claude-connect-local';
+  env.ANTHROPIC_BASE_URL = connectionBaseUrl;
+  env.ANTHROPIC_AUTH_TOKEN = authToken;
   env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = 1;
   env.CLAUDE_CONNECT_ACTIVE_PROFILE = profile.profileName;
   env.CLAUDE_CONNECT_PROVIDER = profile.provider.id;
   env.CLAUDE_CONNECT_MODEL = profile.model.id;
   env.CLAUDE_CONNECT_AUTH_METHOD = authMethod;
+  env.CLAUDE_CONNECT_CONNECTION_MODE = connectionMode;
+
+  if (connectionMode === 'direct' && profile.provider.id === 'deepseek') {
+    env.API_TIMEOUT_MS = '600000';
+    env.ANTHROPIC_MODEL = profile.model.id;
+    env.ANTHROPIC_DEFAULT_HAIKU_MODEL = profile.model.id;
+  } else {
+    delete env.ANTHROPIC_MODEL;
+    delete env.ANTHROPIC_DEFAULT_HAIKU_MODEL;
+  }
 
   if (authMethod === 'token') {
     env.CLAUDE_CONNECT_TOKEN_ENV_VAR = profile.auth.envVar;
@@ -70,17 +119,25 @@ export async function activateClaudeProfile({ profile, gatewayBaseUrl = 'http://
   const currentSettings = await readClaudeSettings();
   const currentState = await readSwitchState();
   const originalSettings = currentState?.originalSettings ?? currentSettings;
+  const transport = await resolveClaudeTransportForProfile({
+    profile,
+    gatewayBaseUrl
+  });
   const nextSettings = buildClaudeSettingsForProfile({
     baseSettings: currentSettings,
     profile,
-    gatewayBaseUrl
+    connectionBaseUrl: transport.connectionBaseUrl,
+    authToken: transport.authToken,
+    connectionMode: transport.connectionMode
   });
 
   await writeJson(claudeSettingsPath, nextSettings);
   await writeJson(stateFilePath, {
     schemaVersion: 1,
     active: true,
-    gatewayBaseUrl,
+    gatewayBaseUrl: transport.connectionMode === 'gateway' ? transport.connectionBaseUrl : null,
+    connectionBaseUrl: transport.connectionBaseUrl,
+    connectionMode: transport.connectionMode,
     profileName: profile.profileName,
     profilePath: profile.filePath,
     originalSettings,
@@ -90,7 +147,9 @@ export async function activateClaudeProfile({ profile, gatewayBaseUrl = 'http://
   return {
     claudeSettingsPath,
     stateFilePath,
-    gatewayBaseUrl
+    gatewayBaseUrl: transport.connectionMode === 'gateway' ? transport.connectionBaseUrl : null,
+    connectionBaseUrl: transport.connectionBaseUrl,
+    connectionMode: transport.connectionMode
   };
 }
 
@@ -133,6 +192,8 @@ export async function getClaudeSwitchStatus() {
     stateFilePath,
     active: Boolean(state?.active),
     gatewayBaseUrl: state?.gatewayBaseUrl ?? null,
+    connectionBaseUrl: state?.connectionBaseUrl ?? null,
+    connectionMode: state?.connectionMode ?? null,
     profileName: state?.profileName ?? null,
     currentModel: typeof currentSettings.model === 'string' ? currentSettings.model : null,
     anthropicBaseUrl: typeof env.ANTHROPIC_BASE_URL === 'string' ? env.ANTHROPIC_BASE_URL : null,
