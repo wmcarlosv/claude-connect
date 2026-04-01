@@ -52,6 +52,7 @@ test('prepareIsolatedClaudeRuntime writes a dedicated kimi runtime without oauth
   const runtime = await prepareIsolatedClaudeRuntime({ profile: kimiProfile });
   const settings = JSON.parse(await fs.readFile(runtime.claudeSettingsPath, 'utf8'));
   const account = JSON.parse(await fs.readFile(runtime.claudeAccountPath, 'utf8'));
+  const launcher = await fs.readFile(runtime.launcherPath, 'utf8');
 
   assert.equal(runtime.command, 'claude-kimi');
   assert.equal(settings.env.ANTHROPIC_BASE_URL, 'https://api.kimi.com/coding/');
@@ -60,6 +61,8 @@ test('prepareIsolatedClaudeRuntime writes a dedicated kimi runtime without oauth
   assert.equal(settings.env.ENABLE_TOOL_SEARCH, 'false');
   assert.equal(account.oauthAccount, undefined);
   assert.equal(account.hasCompletedOnboarding, true);
+  assert.equal(runtime.launcherPath.endsWith('claude-kimi'), true);
+  assert.equal(launcher.includes('launch-profile "kimi-kimi-for-coding-token"'), true);
 
   store.close();
 });

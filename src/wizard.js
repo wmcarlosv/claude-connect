@@ -26,6 +26,7 @@ import {
   assertInteractiveTerminal,
   buildFrame,
   closeAppScreen,
+  navigation,
   openAppScreen,
   promptText,
   renderScreen,
@@ -33,6 +34,14 @@ import {
   waitForAnyKey
 } from './lib/terminal.js';
 import { colorize, colors } from './lib/theme.js';
+
+function isBack(value) {
+  return value === navigation.BACK;
+}
+
+function isExit(value) {
+  return value === navigation.EXIT;
+}
 
 function mainMenuItems() {
   return [
@@ -250,8 +259,13 @@ async function showCatalog(store) {
       `Autenticacion: ${selected.value.authCount}`,
       `Docs verificadas: ${selected.value.docsVerifiedAt}`
     ],
-    footerHint: '↑/↓ mover · Enter ver detalle · Esc volver'
+    footerHint: '↑/↓ mover · Enter ver detalle · Tab volver · Esc salir',
+    allowBack: true
   });
+
+  if (isBack(provider) || isExit(provider)) {
+    return provider;
+  }
 
   const catalog = store.getProviderCatalog(provider.id);
   renderInfoScreen({
@@ -269,7 +283,7 @@ async function showCatalog(store) {
     footer: 'Presiona una tecla para volver'
   });
 
-  await waitForAnyKey();
+  return await waitForAnyKey();
 }
 
 async function showClaudeStatus() {
@@ -297,7 +311,7 @@ async function showClaudeStatus() {
     footer: 'Presiona una tecla para volver'
   });
 
-  await waitForAnyKey();
+  return await waitForAnyKey();
 }
 
 async function showGatewayStatus() {
@@ -319,7 +333,7 @@ async function showGatewayStatus() {
     footer: 'Presiona una tecla para volver'
   });
 
-  await waitForAnyKey();
+  return await waitForAnyKey();
 }
 
 async function activateClaudeFromSavedProfile() {
@@ -334,8 +348,7 @@ async function activateClaudeFromSavedProfile() {
       ],
       footer: 'Presiona una tecla para volver'
     });
-    await waitForAnyKey();
-    return;
+    return await waitForAnyKey();
   }
 
   const profile = await selectFromList({
@@ -344,6 +357,7 @@ async function activateClaudeFromSavedProfile() {
     title: 'Activa un perfil en Claude Code',
     subtitle: 'Esto conserva tu settings.json actual y permite revertirlo.',
     items: profileItems(profiles),
+    allowBack: true,
     detailBuilder: (selected) => [
       `Proveedor: ${selected.value.provider.name}`,
       `Modelo: ${selected.value.model.id}`,
@@ -353,6 +367,10 @@ async function activateClaudeFromSavedProfile() {
         : `${selected.value.auth.secretFile ? 'API key guardada' : 'sin API key guardada'} · fallback: ${selected.value.auth.envVar}`
     ]
   });
+
+  if (isBack(profile) || isExit(profile)) {
+    return profile;
+  }
 
   if (supportsIsolatedClaudeRuntime(profile)) {
     const revertResult = await revertClaudeProfile();
@@ -367,6 +385,7 @@ async function activateClaudeFromSavedProfile() {
         colorize(`Endpoint: ${runtime.connectionBaseUrl}`, colors.soft),
         colorize(`Runtime: ${runtime.runtimeHome}`, colors.soft),
         colorize(`Settings aislado: ${runtime.claudeSettingsPath}`, colors.soft),
+        colorize(`Launcher generado: ${runtime.launcherPath}`, colors.soft),
         colorize(`Comando recomendado: ${getIsolatedClaudeCommand(profile)}`, colors.soft),
         colorize(`Fallback universal: claude-connect launch-profile ${profile.profileName}`, colors.soft),
         '',
@@ -375,13 +394,13 @@ async function activateClaudeFromSavedProfile() {
             ? 'Claude global fue restaurado para evitar el conflicto con claude.ai.'
             : 'Claude global no fue modificado.',
           colors.soft
-        )
+        ),
+        colorize('Usa el launcher generado para Kimi y sigue usando `claude` normal sin cambios.', colors.soft)
       ],
       footer: 'Presiona una tecla para volver'
     });
 
-    await waitForAnyKey();
-    return;
+    return await waitForAnyKey();
   }
 
   const result = await activateClaudeProfile({ profile });
@@ -421,7 +440,7 @@ async function activateClaudeFromSavedProfile() {
     footer: 'Presiona una tecla para volver'
   });
 
-  await waitForAnyKey();
+  return await waitForAnyKey();
 }
 
 async function editTokenProfile(profile) {
@@ -432,8 +451,13 @@ async function editTokenProfile(profile) {
     subtitle: `Perfil: ${profile.profileName}. Deja vacio para conservar la API key ya guardada.`,
     label: 'API key',
     placeholder: profile.auth.secretFile ? 'Deja vacio para conservar la API key guardada' : 'Pega aqui tu API key',
-    secret: true
+    secret: true,
+    allowBack: true
   });
+
+  if (isBack(apiKey) || isExit(apiKey)) {
+    return apiKey;
+  }
 
   const nextProfile = structuredClone(profile);
   nextProfile.auth.method = profile.auth.method === 'api_key' ? 'token' : profile.auth.method;
@@ -468,7 +492,7 @@ async function editTokenProfile(profile) {
     footer: 'Presiona una tecla para volver'
   });
 
-  await waitForAnyKey();
+  return await waitForAnyKey();
 }
 
 async function deleteSavedProfile(profile) {
@@ -492,7 +516,7 @@ async function deleteSavedProfile(profile) {
     footer: 'Presiona una tecla para volver'
   });
 
-  await waitForAnyKey();
+  return await waitForAnyKey();
 }
 
 async function manageSavedProfiles() {
@@ -507,41 +531,64 @@ async function manageSavedProfiles() {
       ],
       footer: 'Presiona una tecla para volver'
     });
-    await waitForAnyKey();
-    return;
+    return await waitForAnyKey();
   }
 
-  const profile = await selectFromList({
-    step: 1,
-    totalSteps: 2,
-    title: 'Gestionar conexiones',
-    subtitle: 'Selecciona la conexion que quieres modificar.',
-    items: profileItems(profiles),
-    detailBuilder: (selected) => [
-      `Proveedor: ${selected.value.provider.name}`,
-      `Modelo: ${selected.value.model.name}`,
-      `Auth: ${selected.value.auth.method}`,
-      selected.value.auth.method === 'oauth'
-        ? `Token file: ${selected.value.auth.oauth?.tokenFile ?? 'no encontrado'}`
-        : `${selected.value.auth.secretFile ? 'API key guardada' : 'sin API key guardada'} · fallback: ${selected.value.auth.envVar}`
-    ]
-  });
+  while (true) {
+    const profile = await selectFromList({
+      step: 1,
+      totalSteps: 2,
+      title: 'Gestionar conexiones',
+      subtitle: 'Selecciona la conexion que quieres modificar.',
+      items: profileItems(await listProfiles()),
+      allowBack: true,
+      detailBuilder: (selected) => [
+        `Proveedor: ${selected.value.provider.name}`,
+        `Modelo: ${selected.value.model.name}`,
+        `Auth: ${selected.value.auth.method}`,
+        selected.value.auth.method === 'oauth'
+          ? `Token file: ${selected.value.auth.oauth?.tokenFile ?? 'no encontrado'}`
+          : `${selected.value.auth.secretFile ? 'API key guardada' : 'sin API key guardada'} · fallback: ${selected.value.auth.envVar}`
+      ]
+    });
 
-  const action = await selectFromList({
-    step: 2,
-    totalSteps: 2,
-    title: 'Accion sobre la conexion',
-    subtitle: `Perfil: ${profile.profileName}.`,
-    items: profileActionItems(profile),
-    detailBuilder: (selected) => [selected.description]
-  });
+    if (isBack(profile) || isExit(profile)) {
+      return profile;
+    }
 
-  if (action === 'edit-token') {
-    await editTokenProfile(profile);
-  }
+    const action = await selectFromList({
+      step: 2,
+      totalSteps: 2,
+      title: 'Accion sobre la conexion',
+      subtitle: `Perfil: ${profile.profileName}.`,
+      items: profileActionItems(profile),
+      allowBack: true,
+      detailBuilder: (selected) => [selected.description]
+    });
 
-  if (action === 'delete') {
-    await deleteSavedProfile(profile);
+    if (isExit(action)) {
+      return action;
+    }
+
+    if (isBack(action) || action === 'back') {
+      continue;
+    }
+
+    if (action === 'edit-token') {
+      const result = await editTokenProfile(profile);
+
+      if (isExit(result)) {
+        return result;
+      }
+    }
+
+    if (action === 'delete') {
+      const result = await deleteSavedProfile(profile);
+
+      if (isExit(result)) {
+        return result;
+      }
+    }
   }
 }
 
@@ -559,7 +606,7 @@ async function stopGatewayFromMenu() {
     footer: 'Presiona una tecla para volver'
   });
 
-  await waitForAnyKey();
+  return await waitForAnyKey();
 }
 
 async function revertClaudeSwitch() {
@@ -577,150 +624,196 @@ async function revertClaudeSwitch() {
     footer: 'Presiona una tecla para volver'
   });
 
-  await waitForAnyKey();
+  return await waitForAnyKey();
 }
 
 async function createNewConnection(store) {
   const providers = store.getProviders();
-  const provider = await selectFromList({
-    step: 1,
-    totalSteps: 3,
-    title: 'Selecciona el proveedor',
-    subtitle: 'El proveedor guarda su base_url directamente en SQLite.',
-    items: providerItems(providers),
-    detailBuilder: (selected) => [
-      `Vendor: ${selected.value.vendor}`,
-      `Base URL: ${selected.value.baseUrl}`,
-      `Modelos: ${selected.value.modelCount}`,
-      `Docs verificadas: ${selected.value.docsVerifiedAt}`
-    ]
-  });
 
-  const catalog = store.getProviderCatalog(provider.id);
-  const totalSteps = catalog.models.length > 1 ? 3 : 2;
-  let model = catalog.models[0];
-
-  let authMethod = catalog.authMethods[0];
-  let oauthSession;
-
-  if (catalog.models.length > 1) {
-    model = await selectFromList({
-      step: 2,
-      totalSteps,
-      title: 'Selecciona el modelo',
-      subtitle: `Proveedor: ${catalog.name}.`,
-      items: modelItems(catalog.models),
+  while (true) {
+    const provider = await selectFromList({
+      step: 1,
+      totalSteps: 3,
+      title: 'Selecciona el proveedor',
+      subtitle: 'El proveedor guarda su base_url directamente en SQLite.',
+      items: providerItems(providers),
+      allowBack: true,
       detailBuilder: (selected) => [
-        `Modelo: ${selected.value.id}`,
-        `Categoria: ${selected.value.category}`,
-        `Contexto: ${selected.value.contextWindow}`,
-        selected.value.summary
+        `Vendor: ${selected.value.vendor}`,
+        `Base URL: ${selected.value.baseUrl}`,
+        `Modelos: ${selected.value.modelCount}`,
+        `Docs verificadas: ${selected.value.docsVerifiedAt}`
       ]
     });
-  }
 
-  authMethod = await selectFromList({
-    step: totalSteps,
-    totalSteps,
-    title: 'Tipo de conexion',
-    subtitle: `${catalog.name} usara el modelo ${model.name}.`,
-    items: authItems(catalog.authMethods),
-    detailBuilder: (selected) => [
-      `Metodo: ${selected.value.name}`,
-      selected.value.description,
-      selected.value.id === 'oauth' && catalog.oauth
-        ? `Se abrira: ${catalog.oauth.browserAuthUrl}?user_code=...&client=qwen-code`
-        : `Base URL: ${catalog.baseUrl}`
-    ]
-  });
+    if (isBack(provider) || isExit(provider)) {
+      return provider;
+    }
 
-  const profileName = slugifyProfileName(`${provider.id}-${model.id}-${authMethod.id}`);
-  const apiKeyEnvVar = catalog.defaultApiKeyEnvVar;
-  let managedSecretFile = '';
+    const catalog = store.getProviderCatalog(provider.id);
+    const totalSteps = catalog.models.length > 1 ? 3 : 2;
+    let model = catalog.models[0];
 
-  if (authMethod.id === 'token') {
-    const apiKeyValue = await promptText({
-      step: totalSteps,
-      totalSteps,
-      title: 'API key del proveedor',
-      subtitle: `Modelo: ${model.name}. Puedes guardarla ahora o hacerlo luego en Gestionar conexiones.`,
-      label: 'API key',
-      placeholder: 'Pega aqui tu API key o deja vacio',
-      secret: true
-    });
-
-    if (apiKeyValue.trim().length > 0) {
-      managedSecretFile = await saveManagedTokenSecret({
-        profileName,
-        providerId: catalog.id,
-        modelId: model.id,
-        envVar: apiKeyEnvVar,
-        token: apiKeyValue.trim()
+    if (catalog.models.length > 1) {
+      model = await selectFromList({
+        step: 2,
+        totalSteps,
+        title: 'Selecciona el modelo',
+        subtitle: `Proveedor: ${catalog.name}.`,
+        items: modelItems(catalog.models),
+        allowBack: true,
+        detailBuilder: (selected) => [
+          `Modelo: ${selected.value.id}`,
+          `Categoria: ${selected.value.category}`,
+          `Contexto: ${selected.value.contextWindow}`,
+          selected.value.summary
+        ]
       });
+
+      if (isExit(model)) {
+        return model;
+      }
+
+      if (isBack(model)) {
+        continue;
+      }
+    }
+
+    while (true) {
+      const authMethod = await selectFromList({
+        step: totalSteps,
+        totalSteps,
+        title: 'Tipo de conexion',
+        subtitle: `${catalog.name} usara el modelo ${model.name}.`,
+        items: authItems(catalog.authMethods),
+        allowBack: true,
+        detailBuilder: (selected) => [
+          `Metodo: ${selected.value.name}`,
+          selected.value.description,
+          selected.value.id === 'oauth' && catalog.oauth
+            ? `Se abrira: ${catalog.oauth.browserAuthUrl}?user_code=...&client=qwen-code`
+            : `Base URL: ${catalog.baseUrl}`
+        ]
+      });
+
+      if (isExit(authMethod)) {
+        return authMethod;
+      }
+
+      if (isBack(authMethod)) {
+        break;
+      }
+
+      const profileName = slugifyProfileName(`${provider.id}-${model.id}-${authMethod.id}`);
+      const apiKeyEnvVar = catalog.defaultApiKeyEnvVar;
+      let managedSecretFile = '';
+      let oauthSession;
+
+      if (authMethod.id === 'token') {
+        const apiKeyValue = await promptText({
+          step: totalSteps,
+          totalSteps,
+          title: 'API key del proveedor',
+          subtitle: `Modelo: ${model.name}. Puedes guardarla ahora o hacerlo luego en Gestionar conexiones.`,
+          label: 'API key',
+          placeholder: 'Pega aqui tu API key o deja vacio',
+          secret: true,
+          allowBack: true
+        });
+
+        if (isExit(apiKeyValue)) {
+          return apiKeyValue;
+        }
+
+        if (isBack(apiKeyValue)) {
+          continue;
+        }
+
+        if (apiKeyValue.trim().length > 0) {
+          managedSecretFile = await saveManagedTokenSecret({
+            profileName,
+            providerId: catalog.id,
+            modelId: model.id,
+            envVar: apiKeyEnvVar,
+            token: apiKeyValue.trim()
+          });
+        }
+      }
+
+      if (authMethod.id === 'oauth') {
+        const renderOAuthStatus = ({ title, subtitle, lines }) => {
+          renderInfoScreen({
+            title,
+            subtitle,
+            lines: lines.map((line) => colorize(line, colors.soft)),
+            footer: 'Completa el flujo en el navegador o vuelve a la terminal'
+          });
+        };
+
+        const oauthResult = await runOAuthAuthorization({
+          providerName: catalog.name,
+          oauthConfig: catalog.oauth,
+          statusRenderer: renderOAuthStatus,
+          waitUntilReady: async () => await waitForAnyKey()
+        });
+
+        if (isExit(oauthResult)) {
+          return oauthResult;
+        }
+
+        const { authUrl, tokenPayload } = oauthResult;
+
+        const tokenFile = await saveOAuthToken({
+          profileName,
+          providerId: catalog.id,
+          tokenPayload
+        });
+
+        renderInfoScreen({
+          title: 'OAuth guardado',
+          subtitle: 'La consola ya recibio la aprobacion de Qwen y guardo el token.',
+          lines: [
+            colorize(`URL usada: ${authUrl}`, colors.soft),
+            colorize(`Token guardado en: ${tokenFile}`, colors.soft),
+            colorize('Ahora se generara el perfil local.', colors.soft)
+          ],
+          footer: 'Presiona una tecla para continuar'
+        });
+
+        const oauthContinue = await waitForAnyKey();
+
+        if (isExit(oauthContinue)) {
+          return oauthContinue;
+        }
+
+        oauthSession = {
+          clientId: catalog.oauth.clientId,
+          authUrl,
+          deviceCodeUrl: catalog.oauth.deviceCodeUrl,
+          tokenUrl: catalog.oauth.tokenUrl,
+          tokenFile,
+          apiBaseUrl: 'https://portal.qwen.ai/v1'
+        };
+      }
+
+      const profile = buildProfile({
+        provider: catalog,
+        model,
+        authMethod,
+        profileName,
+        apiKeyEnvVar,
+        oauthSession
+      });
+
+      if (managedSecretFile) {
+        profile.auth.secretFile = managedSecretFile;
+      }
+
+      const filePath = await saveProfile(profile);
+      renderSummary({ profile, filePath });
+      return await waitForAnyKey();
     }
   }
-
-  if (authMethod.id === 'oauth') {
-    const renderOAuthStatus = ({ title, subtitle, lines }) => {
-      renderInfoScreen({
-        title,
-        subtitle,
-        lines: lines.map((line) => colorize(line, colors.soft)),
-        footer: 'Completa el flujo en el navegador o vuelve a la terminal'
-      });
-    };
-
-    const { authUrl, tokenPayload } = await runOAuthAuthorization({
-      providerName: catalog.name,
-      oauthConfig: catalog.oauth,
-      statusRenderer: renderOAuthStatus,
-      waitUntilReady: async () => await waitForAnyKey()
-    });
-
-    const tokenFile = await saveOAuthToken({
-      profileName,
-      providerId: catalog.id,
-      tokenPayload
-    });
-
-    renderInfoScreen({
-      title: 'OAuth guardado',
-      subtitle: 'La consola ya recibio la aprobacion de Qwen y guardo el token.',
-      lines: [
-        colorize(`URL usada: ${authUrl}`, colors.soft),
-        colorize(`Token guardado en: ${tokenFile}`, colors.soft),
-        colorize('Ahora se generara el perfil local.', colors.soft)
-      ],
-      footer: 'Presiona una tecla para continuar'
-    });
-    await waitForAnyKey();
-
-    oauthSession = {
-      clientId: catalog.oauth.clientId,
-      authUrl,
-      deviceCodeUrl: catalog.oauth.deviceCodeUrl,
-      tokenUrl: catalog.oauth.tokenUrl,
-      tokenFile,
-      apiBaseUrl: 'https://portal.qwen.ai/v1'
-    };
-  }
-
-  const profile = buildProfile({
-    provider: catalog,
-    model,
-    authMethod,
-    profileName,
-    apiKeyEnvVar,
-    oauthSession
-  });
-
-  if (managedSecretFile) {
-    profile.auth.secretFile = managedSecretFile;
-  }
-
-  const filePath = await saveProfile(profile);
-  renderSummary({ profile, filePath });
-  await waitForAnyKey();
 }
 
 export async function runWizard() {
@@ -731,7 +824,11 @@ export async function runWizard() {
     const store = getCatalogStore();
 
     renderWelcome();
-    await waitForAnyKey();
+    const welcomeAction = await waitForAnyKey();
+
+    if (isExit(welcomeAction)) {
+      return;
+    }
 
     while (true) {
       const action = await selectFromList({
@@ -743,40 +840,72 @@ export async function runWizard() {
         detailBuilder: (selected) => [selected.description]
       });
 
-      if (action === 'exit') {
+      if (isExit(action) || action === 'exit') {
         return;
       }
 
       if (action === 'catalog') {
-        await showCatalog(store);
+        const result = await showCatalog(store);
+
+        if (isExit(result)) {
+          return;
+        }
       }
 
       if (action === 'new') {
-        await createNewConnection(store);
+        const result = await createNewConnection(store);
+
+        if (isExit(result)) {
+          return;
+        }
       }
 
       if (action === 'status') {
-        await showClaudeStatus();
+        const result = await showClaudeStatus();
+
+        if (isExit(result)) {
+          return;
+        }
       }
 
       if (action === 'activate') {
-        await activateClaudeFromSavedProfile();
+        const result = await activateClaudeFromSavedProfile();
+
+        if (isExit(result)) {
+          return;
+        }
       }
 
       if (action === 'manage') {
-        await manageSavedProfiles();
+        const result = await manageSavedProfiles();
+
+        if (isExit(result)) {
+          return;
+        }
       }
 
       if (action === 'gateway-status') {
-        await showGatewayStatus();
+        const result = await showGatewayStatus();
+
+        if (isExit(result)) {
+          return;
+        }
       }
 
       if (action === 'gateway-stop') {
-        await stopGatewayFromMenu();
+        const result = await stopGatewayFromMenu();
+
+        if (isExit(result)) {
+          return;
+        }
       }
 
       if (action === 'revert') {
-        await revertClaudeSwitch();
+        const result = await revertClaudeSwitch();
+
+        if (isExit(result)) {
+          return;
+        }
       }
     }
   } finally {

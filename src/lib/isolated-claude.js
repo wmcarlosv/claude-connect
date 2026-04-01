@@ -2,12 +2,16 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
 import {
   buildClaudeSettingsForProfile,
   resolveClaudeTransportForProfile
 } from './claude-settings.js';
 import { resolveClaudeConnectPaths } from './app-paths.js';
 import { slugifyProfileName } from './profile.js';
+
+const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+const cliEntryPath = path.join(projectRoot, 'bin', 'claude-connect.js');
 
 function isObject(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -45,6 +49,49 @@ export function getIsolatedClaudeCommand(profile) {
   }
 
   return `claude-connect launch-profile ${profile.profileName}`;
+}
+
+function getLauncherBaseName(profile) {
+  if (profile?.provider?.id === 'kimi') {
+    return 'claude-kimi';
+  }
+
+  return slugifyProfileName(`claude-${profile.profileName || profile?.provider?.id || 'runtime'}`);
+}
+
+function buildWindowsLauncherContent({ profileName }) {
+  return [
+    '@echo off',
+    'setlocal',
+    `node --no-warnings=ExperimentalWarning "${cliEntryPath}" launch-profile "${profileName}" %*`
+  ].join('\r\n').concat('\r\n');
+}
+
+function buildPosixLauncherContent({ profileName }) {
+  return [
+    '#!/usr/bin/env bash',
+    `node --no-warnings=ExperimentalWarning "${cliEntryPath}" launch-profile "${profileName}" "$@"`
+  ].join('\n').concat('\n');
+}
+
+export async function ensureIsolatedLauncher(profile) {
+  const { claudeConnectHome } = await resolveClaudeConnectPaths();
+  const launcherDir = path.join(claudeConnectHome, 'bin');
+  const baseName = getLauncherBaseName(profile);
+  const extension = process.platform === 'win32' ? '.cmd' : '';
+  const launcherPath = path.join(launcherDir, `${baseName}${extension}`);
+  const content = process.platform === 'win32'
+    ? buildWindowsLauncherContent({ profileName: profile.profileName })
+    : buildPosixLauncherContent({ profileName: profile.profileName });
+
+  await fs.mkdir(launcherDir, { recursive: true });
+  await fs.writeFile(launcherPath, content, { mode: 0o755 });
+
+  if (process.platform !== 'win32') {
+    await fs.chmod(launcherPath, 0o755);
+  }
+
+  return launcherPath;
 }
 
 function buildLaunchEnv(runtimeHome) {
@@ -121,6 +168,7 @@ export async function prepareIsolatedClaudeRuntime({
     runtimeHome,
     updatedAt: new Date().toISOString()
   });
+  const launcherPath = await ensureIsolatedLauncher(profile);
 
   return {
     runtimeHome,
@@ -129,6 +177,7 @@ export async function prepareIsolatedClaudeRuntime({
     runtimeInfoPath,
     connectionBaseUrl: transport.connectionBaseUrl,
     command: getIsolatedClaudeCommand(profile),
+    launcherPath,
     connectionMode: transport.connectionMode
   };
 }
