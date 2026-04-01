@@ -1,6 +1,6 @@
 {
   "name": "claude-connect",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "CLI para configurar Claude Code con proveedores de modelos externos",
   "author": "wmcarlosv",
   "type": "module",
