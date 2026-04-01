@@ -32,6 +32,23 @@ npm link
 claude-connect
 ```
 
+Instalación desde npm:
+
+```bash
+npm install -g claude-connect
+claude-connect
+```
+
+Ejecución sin instalación global:
+
+```bash
+npx claude-connect
+```
+
+Requisito:
+
+- Node.js 22 o superior
+
 ## Flujo principal
 
 1. `Nueva conexion`

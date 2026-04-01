@@ -2,20 +2,40 @@
   "name": "claude-connect",
   "version": "0.1.0",
   "description": "CLI para configurar Claude Code con proveedores de modelos externos",
+  "author": "wmcarlosv",
   "type": "module",
+  "homepage": "https://github.com/wmcarlosv/claude-connect#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wmcarlosv/claude-connect.git"
+  },
+  "bugs": {
+    "url": "https://github.com/wmcarlosv/claude-connect/issues"
+  },
   "bin": {
     "claude-connect": "./bin/claude-connect.js"
   },
+  "files": [
+    "bin/claude-connect.js",
+    "src/",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "start": "node --no-warnings=ExperimentalWarning ./bin/claude-connect.js",
-    "test": "node --no-warnings=ExperimentalWarning --test"
+    "test": "node --no-warnings=ExperimentalWarning --test",
+    "prepublishOnly": "npm test"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.0.0"
   },
   "keywords": [
     "cli",
     "claude",
+    "claude-code",
+    "anthropic",
+    "deepseek",
+    "kimi",
     "qwen",
     "terminal"
   ],
