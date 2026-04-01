@@ -1,3 +1,4 @@
+import packageJson from '../package.json' with { type: 'json' };
 import { getCatalogStore } from './data/catalog-store.js';
 import { gatewayBaseUrl } from './gateway/constants.js';
 import { getGatewayStatus } from './gateway/state.js';
@@ -16,6 +17,10 @@ function printGatewayStatus(status) {
   ];
 
   process.stdout.write(`${lines.join('\n')}\n`);
+}
+
+function printVersion() {
+  process.stdout.write(`${packageJson.version}\n`);
 }
 
 async function runGatewayCommand(args) {
@@ -51,6 +56,11 @@ async function runGatewayCommand(args) {
 }
 
 export async function run(argv = process.argv.slice(2)) {
+  if (argv[0] === '--version' || argv[0] === '-v' || argv[0] === 'version') {
+    printVersion();
+    return;
+  }
+
   if (argv[0] === 'gateway') {
     await runGatewayCommand(argv.slice(1));
     return;
