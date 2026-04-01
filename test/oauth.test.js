@@ -6,8 +6,11 @@ test('buildBrowserOpenCommands avoids cmd start for qwen oauth URLs on windows',
   const url = 'https://chat.qwen.ai/authorize?user_code=0QY6QD_M&client=qwen-code';
   const commands = buildBrowserOpenCommands(url, 'win32');
 
-  assert.deepEqual(commands[0], ['explorer.exe', [url]]);
-  assert.equal(commands.some(([command]) => command === 'cmd'), false);
+  assert.equal(commands[0][0], 'powershell.exe');
+  assert.equal(commands[0][1][0], '-NoProfile');
+  assert.equal(commands[0][1][1], '-Command');
+  assert.equal(commands[0][1][2].includes(url), true);
+  assert.equal(commands.some(([command]) => command === 'explorer.exe'), false);
 });
 
 test('buildCurlCommand uses curl.exe on windows and preserves form body', () => {

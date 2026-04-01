@@ -170,9 +170,9 @@ export function buildBrowserOpenCommands(url, platform = process.platform) {
 
   if (platform === 'win32') {
     return [
-      ['explorer.exe', [url]],
+      ['powershell.exe', ['-NoProfile', '-Command', `Start-Process '${url.replace(/'/g, "''")}'`]],
       ['rundll32.exe', ['url.dll,FileProtocolHandler', url]],
-      ['powershell.exe', ['-NoProfile', '-Command', 'Start-Process', url]]
+      ['cmd.exe', ['/c', 'start', '""', url]]
     ];
   }
 
@@ -322,10 +322,14 @@ export async function runOAuthAuthorization({ providerName, oauthConfig, statusR
       ? 'Se abrio el navegador. Completa el login y vuelve a la terminal.'
       : 'No pude abrir el navegador automaticamente. Abre esta URL manualmente.',
     lines: [
+      'URL para copiar y pegar:',
       authUrl,
       '',
       `User code: ${deviceAuthorization.user_code}`,
-      'La URL mostrada es la de Qwen, no la de Alibaba Cloud.'
+      'La URL mostrada es la de Qwen, no la de Alibaba Cloud.',
+      browserOpened
+        ? 'Si no ves la pagina, copia esta URL y pegala manualmente en tu navegador.'
+        : 'Copia la URL anterior en tu navegador y continua el login.'
     ]
   });
 
