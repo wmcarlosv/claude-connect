@@ -47,7 +47,7 @@ function mainMenuItems() {
     },
     {
       label: 'Activar en Claude',
-      description: 'Aplica el perfil o prepara un lanzador aislado segun el proveedor.',
+      description: 'Aplica el perfil seleccionado sobre Claude Code.',
       value: 'activate'
     },
     {

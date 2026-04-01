@@ -2,166 +2,188 @@
 
 ## Objetivo
 
-`claude-connect` es un CLI en Node.js para conectar `Claude Code` con proveedores externos de modelos. La primera integración activa es `Qwen`.
-
-La app busca:
-
-- crear conexiones locales por proveedor
-- soportar `OAuth` y `Token` cuando el proveedor lo permita
-- guardar perfiles reutilizables
-- conmutar `Claude Code` hacia un gateway local compatible con Anthropic
-- poder revertir la configuración original de Claude en cualquier momento
+`claude-connect` es un CLI en Node.js para conectar `Claude Code` con proveedores externos de modelos y poder cambiar entre ellos sin perder la configuración original de Claude.
 
 ## Estado actual
 
-Hoy la app ya soporta:
+La app hoy ya soporta:
 
 - interfaz interactiva de consola
-- catálogo en SQLite
+- catálogo local en SQLite
 - proveedor `Kimi`
 - proveedor `DeepSeek`
 - proveedor `Qwen`
-- modelo `Kimi For Coding` (`kimi-for-coding`)
-- modelos `deepseek-chat` y `deepseek-reasoner`
-- modelo `Qwen Coder` (`qwen3-coder-plus`)
 - autenticación por `Token`
-- autenticación por `OAuth` con device flow de `Qwen Code`
+- autenticación por `OAuth` para `Qwen`
+- perfiles locales reutilizables
 - edición y eliminación de conexiones guardadas
-- almacenamiento local opcional de API keys para perfiles por token
-- guardado de perfiles y tokens localmente
-- activación reversible sobre la configuración real de `Claude Code`
-- limpieza reversible de las credenciales reales de `claude.ai` al activar `Kimi`
-- gateway local `Anthropic-compatible`
-- soporte de descubrimiento de rutas para Linux y Windows
-- catalogo SQLite generado localmente desde seeds sin versionar la base de datos binaria
+- guardado local opcional de API keys para perfiles por token
+- gateway local Anthropic-compatible para `Qwen`
+- activación reversible sobre la instalación real de `Claude Code`
+- snapshot y restauración de:
+  - `settings.json`
+  - `~/.claude.json`
+  - `.credentials.json`
+- detección automática de rutas en Linux y Windows
+- navegación con `Volver` y confirmación de salida con doble `Esc`
+
+## Proveedores activos
+
+### Kimi
+
+- provider id: `kimi`
+- modelo: `kimi-for-coding`
+- auth: `token`
+- base URL: `https://api.kimi.com/coding/`
+- integración: directa sobre Claude Code
+
+### DeepSeek
+
+- provider id: `deepseek`
+- modelos:
+  - `deepseek-chat`
+  - `deepseek-reasoner`
+- auth: `token`
+- base URL del proveedor: `https://api.deepseek.com`
+- base URL usada por Claude Code: `https://api.deepseek.com/anthropic`
+- integración: directa sobre Claude Code
+
+### Qwen
+
+- provider id: `qwen`
+- modelo: `qwen3-coder-plus`
+- auth:
+  - `token`
+  - `oauth`
+- base URL modo token: `https://dashscope.aliyuncs.com/compatible-mode/v1`
+- base URL OAuth upstream real: `https://portal.qwen.ai/v1`
+- integración: a través de gateway local Anthropic-compatible
 
 ## Flujo principal actual
 
-El flujo de usuario hoy es:
-
 1. `Nueva conexion`
 2. seleccionar proveedor
-3. seleccionar tipo de conexión: `OAuth` o `Token`
-4. guardar perfil local
-5. `Activar en Claude`
-6. si es `Qwen`, arrancar gateway local
-7. si es `Kimi`, preparar launcher aislado
-8. usar `Claude Code` con el modo correspondiente
+3. seleccionar modelo
+4. seleccionar tipo de conexión
+5. guardar perfil local
+6. `Activar en Claude`
+7. abrir `claude`
 
-También existe:
+Si el perfil activado es:
 
+- `Kimi`: Claude usa endpoint directo de Kimi
+- `DeepSeek`: Claude usa endpoint directo Anthropic-compatible de DeepSeek
+- `Qwen`: Claude usa el gateway local en `127.0.0.1:4310`
+
+También existen estas opciones en el menú:
+
+- `Gestionar conexiones`
 - `Estado Claude`
 - `Estado gateway`
 - `Detener gateway`
-- `Gestionar conexiones`
 - `Revertir Claude`
-- comando `claude-kimi`
+- `Ver catalogo`
 
-## Arquitectura
-
-### 1. Catálogo
+## Catálogo
 
 Archivo principal:
 
 - `src/data/catalog-store.js`
 
-Se usa SQLite para guardar:
+Detalles:
+
+- el catálogo se siembra desde código
+- la base local se genera automáticamente en `storage/claude-connect.sqlite`
+- la base SQLite ya no se versiona en git
+- esto evita conflictos de `git pull` por cambios locales del catálogo
+
+El catálogo guarda:
 
 - proveedores
 - modelos
 - métodos de autenticación
 - configuración OAuth por proveedor
+- `base_url` por proveedor
 
-El repo comparte las seeds del catalogo en codigo, pero no comparte perfiles, tokens, API keys ni la base SQLite generada de cada usuario.
-
-Actualmente el catálogo siembra dos proveedores:
-
-- `Kimi`
-- `DeepSeek`
-- `Qwen`
-
-Con:
-
-- Kimi:
-  - `base_url`: `https://api.kimi.com/coding/`
-  - modelo: `kimi-for-coding`
-  - auth: `token`
-- DeepSeek:
-  - `base_url`: `https://api.deepseek.com`
-  - modelos: `deepseek-chat`, `deepseek-reasoner`
-  - auth: `token`
-- `base_url` para modo token: `https://dashscope.aliyuncs.com/compatible-mode/v1`
-- modelo fijo: `qwen3-coder-plus`
-- auth methods: `token`, `oauth`
-
-## 2. Perfiles
+## Perfiles y secretos
 
 Archivo principal:
 
 - `src/lib/profile.js`
 
+Secretos:
+
+- `src/lib/secrets.js`
+
 Los perfiles guardan:
 
 - proveedor
 - modelo
-- método de auth
+- método de autenticación
 - endpoint base
-- datos auxiliares de integración
+- metadata del perfil
 
-Los perfiles no guardan la API key. En modo token solo se guarda el nombre de la variable de entorno.
+Los secretos viven fuera del repo, dentro del directorio local de Claude Connect.
 
-Si el usuario decide guardar una API key administrada por la app, esa informacion vive fuera del repo, dentro del directorio local de `Claude Connect`.
+Por defecto:
 
-## 3. OAuth de Qwen
+- Linux: `~/.claude-connect`
+- Windows: `%APPDATA%\claude-connect`
+
+Ahí se guardan:
+
+- perfiles
+- tokens OAuth
+- API keys administradas por la app
+- estado del switch
+- estado y logs del gateway
+
+## OAuth de Qwen
 
 Archivo principal:
 
 - `src/lib/oauth.js`
 
-El flujo OAuth implementado es el `device flow` de `Qwen Code`, no el de Alibaba Cloud.
+El flujo implementado es el device flow oficial de `Qwen Code`.
 
 Endpoints usados:
 
 - device code: `https://chat.qwen.ai/api/v1/oauth2/device/code`
 - token: `https://chat.qwen.ai/api/v1/oauth2/token`
-- URL de autorización mostrada al usuario: `https://chat.qwen.ai/auth?...` o `https://chat.qwen.ai/authorize?...`
+- URL mostrada al usuario:
+  - `https://chat.qwen.ai/auth?...`
+  - o `https://chat.qwen.ai/authorize?...`
 
-El token se guarda localmente con:
+Comportamiento actual:
 
-- `access_token`
-- `refresh_token`
-- `expires_in`
-- `expiresAt`
-- `savedAt`
+- intenta abrir el navegador por defecto
+- también muestra la URL en consola para copiar y pegar manualmente
+- en Windows se corrigió la apertura para no truncar parámetros ni abrir el explorador de archivos
+- si la autorización expira o falla, el error ahora se muestra con mejor detalle
 
-También quedó soporte para refrescar el token si el gateway recibe un `401`.
-
-## 4. Switch reversible de Claude Code
+## Switch reversible de Claude Code
 
 Archivo principal:
 
 - `src/lib/claude-settings.js`
 
-La app:
+La app hoy:
 
-- detecta el `settings.json` real de Claude
-- preserva una copia lógica del estado original
-- escribe la nueva configuración para usar el gateway local
-- permite revertir al estado anterior
-- evita tocar el Claude global cuando el proveedor usa runtime aislado
+- detecta automáticamente la instalación real de Claude
+- escribe la configuración activa del proveedor elegido
+- guarda snapshots del estado original
+- limpia de forma reversible credenciales de `claude.ai` cuando hace falta
+- restaura todo con `Revertir Claude`
 
-Variables de entorno que inyecta al activar un perfil:
+Archivos afectados:
 
-- `ANTHROPIC_BASE_URL`
-- `ANTHROPIC_AUTH_TOKEN`
-- `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`
-- `CLAUDE_CONNECT_ACTIVE_PROFILE`
-- `CLAUDE_CONNECT_PROVIDER`
-- `CLAUDE_CONNECT_MODEL`
-- `CLAUDE_CONNECT_AUTH_METHOD`
-- `CLAUDE_CONNECT_TOKEN_ENV_VAR` o `CLAUDE_CONNECT_TOKEN_FILE`
+- `settings.json`
+- `~/.claude.json`
+- `.credentials.json`
 
-## 5. Gateway local
+Esto fue necesario especialmente para `Kimi`, porque Claude Code seguía detectando `claude.ai` aunque `settings.json` ya tuviera `ANTHROPIC_API_KEY`.
+
+## Gateway local
 
 Archivos principales:
 
@@ -170,150 +192,60 @@ Archivos principales:
 - `src/gateway/state.js`
 - `src/gateway/constants.js`
 
-El gateway escucha en:
+Se usa para `Qwen`.
+
+Endpoint local:
 
 - `http://127.0.0.1:4310/anthropic`
 
-Endpoints implementados:
-
-- `GET /anthropic/health`
-- `GET /anthropic/v1/models`
-- `POST /anthropic/v1/messages`
-- `POST /anthropic/v1/messages/count_tokens`
-
 Responsabilidades:
 
+- exponer interfaz Anthropic-compatible a Claude Code
 - resolver el perfil activo
-- obtener credenciales según `token` u `oauth`
-- traducir requests Anthropic a OpenAI-compatible
-- reenviar a Qwen
-- traducir responses OpenAI-compatible a formato Anthropic
-- soportar respuesta normal y `stream: true` por SSE
+- leer token OAuth o API key según el perfil
+- traducir requests/responses entre formatos
+- soportar `stream` y endpoints básicos de mensajes
 
-## 6. Upstream real de Qwen OAuth
-
-Durante la implementación se verificó con una petición real que el upstream válido para OAuth es:
-
-- `https://portal.qwen.ai/v1`
-
-No funcionó:
-
-- `https://api.qwen.ai/v1`
-
-Para perfiles OAuth nuevos se guarda `apiBaseUrl = https://portal.qwen.ai/v1`.
-
-Para perfiles viejos, el gateway también infiere la base usando `resource_url` del token.
-
-## 6.1 Kimi
-
-Kimi quedó integrado por `API key` únicamente.
-
-Base URL configurada:
-
-- `https://api.kimi.com/coding/`
-- activacion directa en Claude Code: `https://api.kimi.com/coding/`
-
-Modelo expuesto:
-
-- `kimi-for-coding`
-
-Según la documentación oficial vigente, Kimi Code para Claude Code usa:
-
-- `ANTHROPIC_BASE_URL=https://api.kimi.com/coding/`
-- `ANTHROPIC_API_KEY=<token>`
-- `ENABLE_TOOL_SEARCH=false`
-
-Para evitar el conflicto entre una sesión normal de `claude.ai` y `Kimi`, el proyecto ahora crea un runtime separado en `~/.claude-connect/runtimes/...` y lo lanza con `claude-kimi` o `claude-connect launch-profile <perfil>`.
-
-## 6.2 DeepSeek
-
-DeepSeek quedó integrado por `API key` únicamente.
-
-Base URL configurada:
-
-- `https://api.deepseek.com`
-- activacion directa en Claude Code: `https://api.deepseek.com/anthropic`
-
-Modelos expuestos:
-
-- `deepseek-chat`
-- `deepseek-reasoner`
-
-Según la documentación oficial vigente, DeepSeek expone compatibilidad Anthropic para Claude Code, con `stream` y `tools` soportados.
-
-## 7. Compatibilidad Linux y Windows
+## Compatibilidad Linux y Windows
 
 Archivo principal:
 
 - `src/lib/app-paths.js`
 
-La app ya no depende de rutas fijas repartidas por el código.
+La app detecta automáticamente:
 
-Ahora detecta automáticamente:
+- ruta de `settings.json`
+- ruta de `~/.claude.json`
+- ruta de `.credentials.json`
+- directorio local de Claude Connect
+- rutas de perfiles, tokens y gateway
 
-- ruta de configuración de Claude
-- directorio base de Claude Connect
-- rutas de perfiles, tokens, estado del switch y logs del gateway
+Se corrigieron además:
 
-Overrides soportados:
+- `npm start` para Windows
+- apertura del navegador en OAuth de Qwen en Windows
+- reutilización del gateway si el puerto ya estaba ocupado por una instancia sana
 
-- `CLAUDE_SETTINGS_PATH`
-- `CLAUDE_CONFIG_DIR`
-- `CLAUDE_CODE_CONFIG_DIR`
+## Navegación de la UI
 
-Tambien se corrigio el punto de entrada del paquete para Windows: los binarios publicados ahora son scripts Node y no wrappers bash, lo que hace que `npm link`, `claude-connect` y `claude-kimi` sean portables en Linux y Windows.
-- `CLAUDE_CONNECT_HOME`
+Archivos principales:
 
-Defaults contemplados:
-
-- Linux: `~/.claude/settings.json`, XDG y `~/.claude-connect`
-- Windows: `%APPDATA%\\Claude\\settings.json`, `%LOCALAPPDATA%\\Claude\\settings.json` y `%APPDATA%\\claude-connect`
-
-Además, el apagado del gateway en Windows usa `taskkill`.
-
-## Verificaciones realizadas
-
-Se verificó:
-
-- tests unitarios pasando con `npm test`
-- arranque real del gateway
-- endpoint `health`
-- request real `POST /anthropic/v1/messages`
-- respuesta real correcta desde Qwen OAuth
-- streaming SSE correcto para `stream: true`
-
-## Archivos clave
-
-- `src/index.js`
 - `src/wizard.js`
-- `src/data/catalog-store.js`
-- `src/lib/app-paths.js`
-- `src/lib/profile.js`
-- `src/lib/oauth.js`
-- `src/lib/claude-settings.js`
-- `src/gateway/server.js`
-- `src/gateway/messages.js`
-- `src/gateway/state.js`
-- `test/app-paths.test.js`
-- `test/gateway-messages.test.js`
+- `src/lib/terminal.js`
 
-## Decisiones importantes tomadas
+Comportamiento actual:
 
-- usar SQLite desde el inicio para catálogo de proveedores
-- versionar en git solo la base SQLite del catálogo
-- no versionar perfiles, tokens, API keys ni estado local de usuarios
-- empezar solo con `Qwen`
-- restringir Qwen a `Qwen Coder`
-- usar el OAuth real de `Qwen Code`
-- usar un gateway local en vez de conectar Claude directamente a OpenAI-compatible
-- mantener reversible el switch de Claude
-- dar compatibilidad a perfiles viejos con `auth.method = api_key`
-- centralizar descubrimiento de rutas para Linux y Windows
+- opción visible `Volver` en listas
+- `Tab` para volver cuando aplica
+- `Esc` una vez avisa
+- `Esc` dos veces sale
+- tras crear o editar una conexión, la app vuelve al menú principal
 
-## Próximos pasos naturales
+## Estado de documentación y repo
 
-- validar el flujo completo en una máquina Windows real
-- añadir más proveedores al catálogo SQLite
-- mejorar la traducción de herramientas si aparecen diferencias con Claude Code real
-- añadir manejo más fino de expiración/refresh de OAuth
-- incorporar comandos no interactivos para crear y activar conexiones más rápido
+Estado actual del repo:
+
+- la base SQLite local ya no se versiona
+- el catálogo compartido vive como seeds en código
+- las credenciales de usuario no se suben al repo
+- los cambios del fix de credenciales de Claude y del no-track de SQLite ya fueron publicados en `master`
