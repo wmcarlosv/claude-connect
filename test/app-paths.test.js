@@ -23,7 +23,7 @@ test('buildClaudeSettingsPathCandidates prioritizes linux defaults and overrides
   ]);
 });
 
-test('buildClaudeSettingsPathCandidates supports windows appdata paths', () => {
+test('buildClaudeSettingsPathCandidates prioritizes the official windows home path first', () => {
   const candidates = buildClaudeSettingsPathCandidates({
     platform: 'win32',
     homedir: 'C:\\Users\\Tester',
@@ -35,9 +35,9 @@ test('buildClaudeSettingsPathCandidates supports windows appdata paths', () => {
   });
 
   assert.deepEqual(candidates, [
+    'C:\\Users\\Tester\\.claude\\settings.json',
     'C:\\Users\\Tester\\AppData\\Roaming\\Claude\\settings.json',
-    'C:\\Users\\Tester\\AppData\\Local\\Claude\\settings.json',
-    'C:\\Users\\Tester\\.claude\\settings.json'
+    'C:\\Users\\Tester\\AppData\\Local\\Claude\\settings.json'
   ]);
 });
 

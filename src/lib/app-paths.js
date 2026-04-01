@@ -104,9 +104,9 @@ export function buildClaudeSettingsPathCandidates({
     return uniqueCandidates([
       env.CLAUDE_SETTINGS_PATH,
       explicitDir && pathModule.join(explicitDir, 'settings.json'),
+      home && pathModule.join(home, '.claude', 'settings.json'),
       env.APPDATA && pathModule.join(env.APPDATA, 'Claude', 'settings.json'),
-      env.LOCALAPPDATA && pathModule.join(env.LOCALAPPDATA, 'Claude', 'settings.json'),
-      home && pathModule.join(home, '.claude', 'settings.json')
+      env.LOCALAPPDATA && pathModule.join(env.LOCALAPPDATA, 'Claude', 'settings.json')
     ], pathModule);
   }
 

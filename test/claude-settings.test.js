@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildClaudeSettingsForProfile } from '../src/lib/claude-settings.js';
+import { buildClaudeSettingsForProfile, detectExternalClaudeEnvConflicts } from '../src/lib/claude-settings.js';
 import { createCatalogStore } from '../src/data/catalog-store.js';
 import { buildProfile } from '../src/lib/profile.js';
 
@@ -77,6 +77,25 @@ test('buildClaudeSettingsForProfile supports deepseek direct anthropic mode', ()
   assert.equal(next.env.CLAUDE_CONNECT_CONNECTION_MODE, 'direct');
 
   store.close();
+});
+
+test('detectExternalClaudeEnvConflicts finds shell variables that can override Claude activation', () => {
+  const conflicts = detectExternalClaudeEnvConflicts({
+    ANTHROPIC_BASE_URL: 'https://api.deepseek.com/anthropic',
+    ANTHROPIC_API_KEY: 'deepseek-secret',
+    PATH: '/usr/bin'
+  });
+
+  assert.deepEqual(conflicts, [
+    {
+      key: 'ANTHROPIC_BASE_URL',
+      value: 'https://api.deepseek.com/anthropic'
+    },
+    {
+      key: 'ANTHROPIC_API_KEY',
+      value: 'deep...'
+    }
+  ]);
 });
 
 test('buildClaudeSettingsForProfile supports kimi direct anthropic mode', () => {

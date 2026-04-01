@@ -153,6 +153,19 @@ function renderInfoScreen({ title, subtitle, lines, footer }) {
   );
 }
 
+function buildExternalConflictLines(conflicts) {
+  if (!Array.isArray(conflicts) || conflicts.length === 0) {
+    return [];
+  }
+
+  return [
+    '',
+    colorize('Variables externas detectadas', colors.bold, colors.warning),
+    ...conflicts.map((conflict) => colorize(`${conflict.key}=${conflict.value}`, colors.warning)),
+    colorize('Estas variables del sistema o de la terminal pueden pisar la configuracion activada.', colors.warning)
+  ];
+}
+
 function renderWelcome() {
   renderScreen(
     buildFrame({
@@ -275,7 +288,7 @@ async function showClaudeStatus() {
     colorize(`Base URL: ${gateway.baseUrl}`, colors.soft),
     colorize(`PID: ${gateway.pid ?? 'ninguno'}`, colors.soft),
     colorize(`Perfil expuesto: ${gateway.profileName ?? 'ninguno'}`, colors.soft)
-  ];
+  ].concat(buildExternalConflictLines(status.externalEnvConflicts));
 
   renderInfoScreen({
     title: 'Estado de Claude Code',
@@ -375,6 +388,7 @@ async function activateClaudeFromSavedProfile() {
   const gateway = result.connectionMode === 'gateway'
     ? await startGatewayInBackground()
     : null;
+  const status = await getClaudeSwitchStatus();
 
   renderInfoScreen({
     title: 'Claude Code actualizado',
@@ -401,7 +415,8 @@ async function activateClaudeFromSavedProfile() {
           ? 'Claude Code ya puede hablar con el gateway local en esa URL.'
           : 'Claude Code ya puede hablar directamente con la API Anthropic del proveedor.',
         colors.soft
-      )
+      ),
+      ...buildExternalConflictLines(status.externalEnvConflicts)
     ],
     footer: 'Presiona una tecla para volver'
   });

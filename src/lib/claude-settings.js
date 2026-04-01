@@ -7,6 +7,30 @@ function isObject(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+const externalConflictKeys = [
+  'ANTHROPIC_BASE_URL',
+  'ANTHROPIC_AUTH_TOKEN',
+  'ANTHROPIC_API_KEY',
+  'ANTHROPIC_MODEL',
+  'ANTHROPIC_DEFAULT_HAIKU_MODEL',
+  'ENABLE_TOOL_SEARCH',
+  'API_TIMEOUT_MS'
+];
+
+function summarizeEnvValue(key, value) {
+  const trimmed = typeof value === 'string' ? value.trim() : '';
+
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  if (key.includes('TOKEN') || key.includes('KEY')) {
+    return `${trimmed.slice(0, 4)}...`;
+  }
+
+  return trimmed;
+}
+
 async function readJsonIfExists(filePath) {
   try {
     const raw = await fs.readFile(filePath, 'utf8');
@@ -23,6 +47,21 @@ async function readJsonIfExists(filePath) {
 async function writeJson(filePath, payload) {
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   await fs.writeFile(filePath, `${JSON.stringify(payload, null, 2)}\n`, { mode: 0o600 });
+}
+
+export function detectExternalClaudeEnvConflicts(env = process.env) {
+  return externalConflictKeys.flatMap((key) => {
+    const value = summarizeEnvValue(key, env[key]);
+
+    if (!value) {
+      return [];
+    }
+
+    return [{
+      key,
+      value
+    }];
+  });
 }
 
 export async function readClaudeSettings() {
@@ -233,6 +272,7 @@ export async function getClaudeSwitchStatus() {
     profileName: state?.profileName ?? null,
     currentModel: typeof currentSettings.model === 'string' ? currentSettings.model : null,
     anthropicBaseUrl: typeof env.ANTHROPIC_BASE_URL === 'string' ? env.ANTHROPIC_BASE_URL : null,
-    hasOriginalSnapshot: Boolean(state?.originalSettings)
+    hasOriginalSnapshot: Boolean(state?.originalSettings),
+    externalEnvConflicts: detectExternalClaudeEnvConflicts()
   };
 }
