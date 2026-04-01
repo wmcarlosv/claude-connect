@@ -3,6 +3,10 @@ import readline from 'node:readline';
 import { colorize, colors, padRight, truncate, visibleWidth } from './theme.js';
 
 const KEY_NAMES = new Set(['up', 'down', 'return', 'escape', 'backspace', 'tab']);
+export const navigation = {
+  BACK: '__CLAUDE_CONNECT_BACK__',
+  EXIT: '__CLAUDE_CONNECT_EXIT__'
+};
 
 export function assertInteractiveTerminal() {
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
@@ -62,6 +66,7 @@ export function waitForAnyKey(message = 'Presiona una tecla para continuar.') {
   return new Promise((resolve, reject) => {
     readline.emitKeypressEvents(process.stdin);
     process.stdin.setRawMode(true);
+    let escapePending = false;
 
     const cleanup = () => {
       process.stdin.removeListener('keypress', onKeypress);
@@ -71,7 +76,19 @@ export function waitForAnyKey(message = 'Presiona una tecla para continuar.') {
     const onKeypress = (_input, key = {}) => {
       if (key.ctrl && key.name === 'c') {
         cleanup();
-        reject(new Error('Operacion cancelada por el usuario.'));
+        resolve(navigation.EXIT);
+        return;
+      }
+
+      if (key.name === 'escape') {
+        if (escapePending) {
+          cleanup();
+          resolve(navigation.EXIT);
+          return;
+        }
+
+        escapePending = true;
+        process.stdout.write(`\n${colorize('Presiona Esc otra vez para salir.', colors.warning)}\n`);
         return;
       }
 
@@ -83,9 +100,29 @@ export function waitForAnyKey(message = 'Presiona una tecla para continuar.') {
   });
 }
 
-export function selectFromList({ step, totalSteps, title, subtitle, items, detailBuilder, footerHint }) {
+export function selectFromList({
+  step,
+  totalSteps,
+  title,
+  subtitle,
+  items,
+  detailBuilder,
+  footerHint,
+  allowBack = false
+}) {
   return new Promise((resolve, reject) => {
+    const options = allowBack
+      ? [
+          ...items,
+          {
+            label: 'Volver',
+            description: 'Regresa a la pantalla anterior.',
+            value: navigation.BACK
+          }
+        ]
+      : items;
     let selectedIndex = 0;
+    let escapePending = false;
 
     readline.emitKeypressEvents(process.stdin);
     process.stdin.setRawMode(true);
@@ -96,11 +133,14 @@ export function selectFromList({ step, totalSteps, title, subtitle, items, detai
     };
 
     const render = () => {
-      const selected = items[selectedIndex];
+      const selected = options[selectedIndex];
+      const detailLines = selected.value === navigation.BACK
+        ? ['Regresa a la pantalla anterior.']
+        : detailBuilder(selected);
       const body = [
         colorize(`Paso ${step}/${totalSteps}`, colors.warning),
         '',
-        ...items.flatMap((item, index) => {
+        ...options.flatMap((item, index) => {
           const active = index === selectedIndex;
           const prefix = active
             ? colorize('›', colors.bold, colors.accent)
@@ -115,11 +155,17 @@ export function selectFromList({ step, totalSteps, title, subtitle, items, detai
         }),
         '',
         colorize('Detalle', colors.bold, colors.accentSoft),
-        ...detailBuilder(selected).map((line) => colorize(line, colors.soft))
+        ...detailLines.map((line) => colorize(line, colors.soft))
       ];
 
       const footer = [
-        colorize(footerHint ?? '↑/↓ mover · Enter seleccionar · Esc salir', colors.dim, colors.muted)
+        colorize(
+          escapePending
+            ? `Esc otra vez salir · Enter seleccionar${allowBack ? ' · Tab volver' : ''}`
+            : footerHint ?? `↑/↓ mover · Enter seleccionar${allowBack ? ' · Tab volver' : ''} · Esc salir`,
+          colors.dim,
+          escapePending ? colors.warning : colors.muted
+        )
       ];
 
       renderScreen(
@@ -136,30 +182,46 @@ export function selectFromList({ step, totalSteps, title, subtitle, items, detai
     const onKeypress = (_input, key = {}) => {
       if (key.ctrl && key.name === 'c') {
         cleanup();
-        reject(new Error('Operacion cancelada por el usuario.'));
+        resolve(navigation.EXIT);
         return;
       }
 
+      if (escapePending && key.name !== 'escape') {
+        escapePending = false;
+      }
+
       if (key.name === 'up') {
-        selectedIndex = (selectedIndex - 1 + items.length) % items.length;
+        selectedIndex = (selectedIndex - 1 + options.length) % options.length;
         render();
         return;
       }
 
       if (key.name === 'down') {
-        selectedIndex = (selectedIndex + 1) % items.length;
+        selectedIndex = (selectedIndex + 1) % options.length;
         render();
         return;
       }
 
       if (key.name === 'escape') {
+        if (escapePending) {
+          cleanup();
+          resolve(navigation.EXIT);
+          return;
+        }
+
+        escapePending = true;
+        render();
+        return;
+      }
+
+      if (key.name === 'tab' && allowBack) {
         cleanup();
-        reject(new Error('Operacion cancelada por el usuario.'));
+        resolve(navigation.BACK);
         return;
       }
 
       if (key.name === 'return') {
-        const selected = items[selectedIndex];
+        const selected = options[selectedIndex];
         cleanup();
         resolve(selected.value);
       }
@@ -178,10 +240,12 @@ export function promptText({
   label,
   defaultValue = '',
   placeholder = '',
-  secret = false
+  secret = false,
+  allowBack = false
 }) {
   return new Promise((resolve, reject) => {
     let value = '';
+    let escapePending = false;
 
     readline.emitKeypressEvents(process.stdin);
     process.stdin.setRawMode(true);
@@ -209,7 +273,13 @@ export function promptText({
       ];
 
       const footer = [
-        colorize('Escribe para editar · Backspace borrar · Enter confirmar · Esc salir', colors.dim, colors.muted)
+        colorize(
+          escapePending
+            ? `Esc otra vez salir · Enter confirmar${allowBack ? ' · Tab volver' : ''}`
+            : `Escribe para editar · Backspace borrar · Enter confirmar${allowBack ? ' · Tab volver' : ''} · Esc salir`,
+          colors.dim,
+          escapePending ? colors.warning : colors.muted
+        )
       ];
 
       renderScreen(
@@ -226,13 +296,29 @@ export function promptText({
     const onKeypress = (input = '', key = {}) => {
       if (key.ctrl && key.name === 'c') {
         cleanup();
-        reject(new Error('Operacion cancelada por el usuario.'));
+        resolve(navigation.EXIT);
         return;
       }
 
       if (key.name === 'escape') {
+        if (escapePending) {
+          cleanup();
+          resolve(navigation.EXIT);
+          return;
+        }
+
+        escapePending = true;
+        render();
+        return;
+      }
+
+      if (escapePending) {
+        escapePending = false;
+      }
+
+      if (key.name === 'tab' && allowBack) {
         cleanup();
-        reject(new Error('Operacion cancelada por el usuario.'));
+        resolve(navigation.BACK);
         return;
       }
 

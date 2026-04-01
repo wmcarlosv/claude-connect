@@ -49,6 +49,15 @@ async function writeJson(filePath, payload) {
   await fs.writeFile(filePath, `${JSON.stringify(payload, null, 2)}\n`, { mode: 0o600 });
 }
 
+async function writeJsonOrRemove(filePath, payload) {
+  if (payload === null) {
+    await fs.rm(filePath, { force: true });
+    return;
+  }
+
+  await writeJson(filePath, payload);
+}
+
 export function detectExternalClaudeEnvConflicts(env = process.env) {
   return externalConflictKeys.flatMap((key) => {
     const value = summarizeEnvValue(key, env[key]);
@@ -68,6 +77,18 @@ export async function readClaudeSettings() {
   const { claudeSettingsPath } = await resolveClaudePaths();
   const settings = await readJsonIfExists(claudeSettingsPath);
   return isObject(settings) ? settings : {};
+}
+
+export async function readClaudeAccount() {
+  const { claudeAccountPath } = await resolveClaudePaths();
+  const account = await readJsonIfExists(claudeAccountPath);
+  return isObject(account) ? account : {};
+}
+
+export async function readClaudeCredentials() {
+  const { claudeCredentialsPath } = await resolveClaudePaths();
+  const credentials = await readJsonIfExists(claudeCredentialsPath);
+  return isObject(credentials) ? credentials : {};
 }
 
 export async function readSwitchState() {
@@ -187,11 +208,22 @@ export function buildClaudeSettingsForProfile({
 }
 
 export async function activateClaudeProfile({ profile, gatewayBaseUrl = 'http://127.0.0.1:4310/anthropic' }) {
-  const { claudeSettingsPath, claudeCodeDir } = await resolveClaudePaths();
+  const {
+    claudeSettingsPath,
+    claudeAccountPath,
+    claudeCredentialsPath,
+    claudeCodeDir
+  } = await resolveClaudePaths();
   const stateFilePath = path.join(claudeCodeDir, 'switch-state.json');
   const currentSettings = await readClaudeSettings();
+  const currentAccount = await readClaudeAccount();
+  const currentCredentials = await readJsonIfExists(claudeCredentialsPath);
   const currentState = await readSwitchState();
   const originalSettings = currentState?.originalSettings ?? currentSettings;
+  const originalAccount = currentState?.originalAccount ?? currentAccount;
+  const originalCredentials = currentState && Object.prototype.hasOwnProperty.call(currentState, 'originalCredentials')
+    ? currentState.originalCredentials
+    : currentCredentials;
   const transport = await resolveClaudeTransportForProfile({
     profile,
     gatewayBaseUrl
@@ -205,8 +237,29 @@ export async function activateClaudeProfile({ profile, gatewayBaseUrl = 'http://
     connectionMode: transport.connectionMode,
     extraEnv: transport.extraEnv
   });
+  const nextAccount = {
+    ...currentAccount
+  };
+  const nextCredentials = isObject(currentCredentials)
+    ? { ...currentCredentials }
+    : {};
+
+  delete nextAccount.oauthAccount;
+  delete nextAccount.accessToken;
+  delete nextAccount.refreshToken;
+  nextAccount.claudeConnectManaged = true;
+  nextAccount.updatedAt = new Date().toISOString();
+
+  delete nextCredentials.claudeAiOauth;
+  delete nextCredentials.oauthAccount;
+  delete nextCredentials.accessToken;
+  delete nextCredentials.refreshToken;
+  nextCredentials.claudeConnectManaged = true;
+  nextCredentials.updatedAt = new Date().toISOString();
 
   await writeJson(claudeSettingsPath, nextSettings);
+  await writeJson(claudeAccountPath, nextAccount);
+  await writeJsonOrRemove(claudeCredentialsPath, nextCredentials);
   await writeJson(stateFilePath, {
     schemaVersion: 1,
     active: true,
@@ -216,11 +269,15 @@ export async function activateClaudeProfile({ profile, gatewayBaseUrl = 'http://
     profileName: profile.profileName,
     profilePath: profile.filePath,
     originalSettings,
+    originalAccount,
+    originalCredentials,
     activatedAt: new Date().toISOString()
   });
 
   return {
     claudeSettingsPath,
+    claudeAccountPath,
+    claudeCredentialsPath,
     stateFilePath,
     gatewayBaseUrl: transport.connectionMode === 'gateway' ? transport.connectionBaseUrl : null,
     connectionBaseUrl: transport.connectionBaseUrl,
@@ -229,7 +286,12 @@ export async function activateClaudeProfile({ profile, gatewayBaseUrl = 'http://
 }
 
 export async function revertClaudeProfile() {
-  const { claudeSettingsPath, claudeCodeDir } = await resolveClaudePaths();
+  const {
+    claudeSettingsPath,
+    claudeAccountPath,
+    claudeCredentialsPath,
+    claudeCodeDir
+  } = await resolveClaudePaths();
   const stateFilePath = path.join(claudeCodeDir, 'switch-state.json');
   const state = await readSwitchState();
 
@@ -237,11 +299,20 @@ export async function revertClaudeProfile() {
     return {
       reverted: false,
       claudeSettingsPath,
+      claudeAccountPath,
+      claudeCredentialsPath,
       stateFilePath
     };
   }
 
   await writeJson(claudeSettingsPath, state.originalSettings ?? {});
+  await writeJson(claudeAccountPath, state.originalAccount ?? {});
+  await writeJsonOrRemove(
+    claudeCredentialsPath,
+    Object.prototype.hasOwnProperty.call(state, 'originalCredentials')
+      ? state.originalCredentials
+      : null
+  );
   await writeJson(stateFilePath, {
     ...state,
     active: false,
@@ -251,19 +322,30 @@ export async function revertClaudeProfile() {
   return {
     reverted: true,
     claudeSettingsPath,
+    claudeAccountPath,
+    claudeCredentialsPath,
     stateFilePath
   };
 }
 
 export async function getClaudeSwitchStatus() {
-  const { claudeSettingsPath, claudeCodeDir } = await resolveClaudePaths();
+  const {
+    claudeSettingsPath,
+    claudeAccountPath,
+    claudeCredentialsPath,
+    claudeCodeDir
+  } = await resolveClaudePaths();
   const stateFilePath = path.join(claudeCodeDir, 'switch-state.json');
   const currentSettings = await readClaudeSettings();
+  const currentAccount = await readClaudeAccount();
+  const currentCredentials = await readClaudeCredentials();
   const state = await readSwitchState();
   const env = isObject(currentSettings.env) ? currentSettings.env : {};
 
   return {
     claudeSettingsPath,
+    claudeAccountPath,
+    claudeCredentialsPath,
     stateFilePath,
     active: Boolean(state?.active),
     gatewayBaseUrl: state?.gatewayBaseUrl ?? null,
@@ -273,6 +355,10 @@ export async function getClaudeSwitchStatus() {
     currentModel: typeof currentSettings.model === 'string' ? currentSettings.model : null,
     anthropicBaseUrl: typeof env.ANTHROPIC_BASE_URL === 'string' ? env.ANTHROPIC_BASE_URL : null,
     hasOriginalSnapshot: Boolean(state?.originalSettings),
+    hasOriginalAccountSnapshot: Boolean(state?.originalAccount),
+    hasOriginalCredentialsSnapshot: Boolean(state && Object.prototype.hasOwnProperty.call(state, 'originalCredentials')),
+    hasOauthAccount: Boolean(currentAccount.oauthAccount),
+    hasClaudeAiOauthCredentials: Boolean(currentCredentials.claudeAiOauth),
     externalEnvConflicts: detectExternalClaudeEnvConflicts()
   };
 }

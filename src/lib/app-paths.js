@@ -119,7 +119,55 @@ export function buildClaudeSettingsPathCandidates({
   ], pathModule);
 }
 
+export function buildClaudeAccountPathCandidates({
+  platform = process.platform,
+  env = process.env,
+  homedir = defaultHomedir(env, os.homedir())
+} = {}) {
+  const pathModule = getPathModule(platform);
+  const home = normalizePathCandidate(env.USERPROFILE, pathModule)
+    || normalizePathCandidate(env.HOME, pathModule)
+    || normalizePathCandidate(homedir, pathModule)
+    || defaultHomedir(env, os.homedir());
+
+  return uniqueCandidates([
+    env.CLAUDE_ACCOUNT_PATH,
+    home && pathModule.join(home, '.claude.json')
+  ], pathModule);
+}
+
+export function buildClaudeCredentialsPathCandidates({
+  platform = process.platform,
+  env = process.env,
+  homedir = defaultHomedir(env, os.homedir())
+} = {}) {
+  const pathModule = getPathModule(platform);
+  const home = normalizePathCandidate(env.USERPROFILE, pathModule)
+    || normalizePathCandidate(env.HOME, pathModule)
+    || normalizePathCandidate(homedir, pathModule)
+    || defaultHomedir(env, os.homedir());
+  const settingsCandidates = buildClaudeSettingsPathCandidates({
+    platform,
+    env,
+    homedir
+  });
+
+  return uniqueCandidates([
+    env.CLAUDE_CREDENTIALS_PATH,
+    ...settingsCandidates.map((candidate) => pathModule.join(pathModule.dirname(candidate), '.credentials.json')),
+    home && pathModule.join(home, '.claude', '.credentials.json')
+  ], pathModule);
+}
+
 export async function resolveClaudeConnectHome(options = {}) {
+  if (typeof options.env?.CLAUDE_CONNECT_HOME === 'string' && options.env.CLAUDE_CONNECT_HOME.trim().length > 0) {
+    return buildClaudeConnectHomeCandidates(options)[0];
+  }
+
+  if (typeof process.env.CLAUDE_CONNECT_HOME === 'string' && process.env.CLAUDE_CONNECT_HOME.trim().length > 0) {
+    return buildClaudeConnectHomeCandidates(options)[0];
+  }
+
   const candidates = buildClaudeConnectHomeCandidates(options);
 
   for (const candidate of candidates) {
@@ -132,7 +180,55 @@ export async function resolveClaudeConnectHome(options = {}) {
 }
 
 export async function resolveClaudeSettingsPath(options = {}) {
+  if (typeof options.env?.CLAUDE_SETTINGS_PATH === 'string' && options.env.CLAUDE_SETTINGS_PATH.trim().length > 0) {
+    return buildClaudeSettingsPathCandidates(options)[0];
+  }
+
+  if (typeof process.env.CLAUDE_SETTINGS_PATH === 'string' && process.env.CLAUDE_SETTINGS_PATH.trim().length > 0) {
+    return buildClaudeSettingsPathCandidates(options)[0];
+  }
+
   const candidates = buildClaudeSettingsPathCandidates(options);
+
+  for (const candidate of candidates) {
+    if (await pathExists(candidate)) {
+      return candidate;
+    }
+  }
+
+  return candidates[0];
+}
+
+export async function resolveClaudeAccountPath(options = {}) {
+  if (typeof options.env?.CLAUDE_ACCOUNT_PATH === 'string' && options.env.CLAUDE_ACCOUNT_PATH.trim().length > 0) {
+    return buildClaudeAccountPathCandidates(options)[0];
+  }
+
+  if (typeof process.env.CLAUDE_ACCOUNT_PATH === 'string' && process.env.CLAUDE_ACCOUNT_PATH.trim().length > 0) {
+    return buildClaudeAccountPathCandidates(options)[0];
+  }
+
+  const candidates = buildClaudeAccountPathCandidates(options);
+
+  for (const candidate of candidates) {
+    if (await pathExists(candidate)) {
+      return candidate;
+    }
+  }
+
+  return candidates[0];
+}
+
+export async function resolveClaudeCredentialsPath(options = {}) {
+  if (typeof options.env?.CLAUDE_CREDENTIALS_PATH === 'string' && options.env.CLAUDE_CREDENTIALS_PATH.trim().length > 0) {
+    return buildClaudeCredentialsPathCandidates(options)[0];
+  }
+
+  if (typeof process.env.CLAUDE_CREDENTIALS_PATH === 'string' && process.env.CLAUDE_CREDENTIALS_PATH.trim().length > 0) {
+    return buildClaudeCredentialsPathCandidates(options)[0];
+  }
+
+  const candidates = buildClaudeCredentialsPathCandidates(options);
 
   for (const candidate of candidates) {
     if (await pathExists(candidate)) {
@@ -159,10 +255,14 @@ export async function resolveClaudeConnectPaths(options = {}) {
 
 export async function resolveClaudePaths(options = {}) {
   const claudeSettingsPath = await resolveClaudeSettingsPath(options);
+  const claudeAccountPath = await resolveClaudeAccountPath(options);
+  const claudeCredentialsPath = await resolveClaudeCredentialsPath(options);
   const claudeConnectPaths = await resolveClaudeConnectPaths(options);
 
   return {
     claudeSettingsPath,
+    claudeAccountPath,
+    claudeCredentialsPath,
     claudeConfigDir: path.dirname(claudeSettingsPath),
     ...claudeConnectPaths
   };

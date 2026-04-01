@@ -4,6 +4,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { spawn } from 'node:child_process';
 import { resolveClaudeConnectPaths } from './app-paths.js';
+import { navigation } from './terminal.js';
 
 function encodeForm(data) {
   return new URLSearchParams(data).toString();
@@ -348,7 +349,11 @@ export async function runOAuthAuthorization({ providerName, oauthConfig, statusR
   });
 
   if (typeof waitUntilReady === 'function') {
-    await waitUntilReady();
+    const readyAction = await waitUntilReady();
+
+    if (readyAction === navigation.EXIT) {
+      return navigation.EXIT;
+    }
   }
 
   const tokenPayload = await pollForToken({
