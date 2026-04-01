@@ -1,11 +1,11 @@
 # Claude Connect
 
-> Conecta `Claude Code` con `OpenCode Go`, `Zen`, `Kimi`, `DeepSeek` y `Qwen` desde una interfaz de consola clara, rápida y reversible.
+> Conecta `Claude Code` con `OpenCode Go`, `Zen`, `Kimi`, `DeepSeek`, `OpenRouter` y `Qwen` desde una interfaz de consola clara, rápida y reversible.
 
 [![npm version](https://img.shields.io/npm/v/claude-connect?style=for-the-badge&logo=npm&color=cb3837)](https://www.npmjs.com/package/claude-connect)
 [![node](https://img.shields.io/badge/node-%3E%3D22-2f7d32?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![license](https://img.shields.io/badge/license-MIT-0f172a?style=for-the-badge)](./LICENSE)
-[![providers](https://img.shields.io/badge/providers-OpenCode%20Go%20%7C%20Zen%20%7C%20Kimi%20%7C%20DeepSeek%20%7C%20Qwen-0ea5e9?style=for-the-badge)](https://www.npmjs.com/package/claude-connect)
+[![providers](https://img.shields.io/badge/providers-OpenCode%20Go%20%7C%20Zen%20%7C%20Kimi%20%7C%20DeepSeek%20%7C%20OpenRouter%20%7C%20Qwen-0ea5e9?style=for-the-badge)](https://www.npmjs.com/package/claude-connect)
 
 ## Why Claude Connect
 
@@ -13,7 +13,7 @@
 
 ### Highlights
 
-- `OpenCode Go`, `Zen`, `Kimi`, `DeepSeek` y `Qwen` listos desde el primer arranque
+- `OpenCode Go`, `Zen`, `Kimi`, `DeepSeek`, `OpenRouter` y `Qwen` listos desde el primer arranque
 - soporte para `Token` y `OAuth` cuando el proveedor lo permite
 - API keys compartidas por proveedor para no repetir el mismo token en cada modelo
 - activación reversible sobre la instalación real de `Claude Code`
@@ -76,8 +76,9 @@ Al activar:
 
 - `OpenCode Go` usa conexión directa o gateway según el modelo elegido
 - `Zen` usa conexión directa o gateway según el modelo elegido
-- `Kimi` apunta a `https://api.kimi.com/coding/`
+- `Kimi` usa gateway local y reenvia al endpoint Anthropic de `https://api.kimi.com/coding/`
 - `DeepSeek` apunta a `https://api.deepseek.com/anthropic`
+- `OpenRouter` usa `openrouter/free` por gateway sobre `https://openrouter.ai/api/v1`
 - `Qwen` apunta al gateway local `http://127.0.0.1:4310/anthropic`
 
 ## Providers
@@ -86,8 +87,9 @@ Al activar:
 | --- | --- | --- | --- |
 | `OpenCode Go` | `glm-5`, `kimi-k2.5`, `minimax-m2.7`, `minimax-m2.5` | `Token` | Mixta |
 | `Zen` | `Claude*` de Zen + modelos `chat/completions` de Zen | `Token` | Mixta |
-| `Kimi` | `kimi-for-coding` | `Token` | Directa |
+| `Kimi` | `kimi-for-coding` | `Token` | Gateway local |
 | `DeepSeek` | `deepseek-chat`, `deepseek-reasoner` | `Token` | Directa |
+| `OpenRouter` | `openrouter/free` | `Token` | Gateway local |
 | `Qwen` | `qwen3-coder-plus` | `OAuth`, `Token` | Gateway local |
 
 Nota sobre `OpenCode Go`:

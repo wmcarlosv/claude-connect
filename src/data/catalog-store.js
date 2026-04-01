@@ -432,7 +432,7 @@ const seedProviders = [
     id: 'kimi',
     name: 'Kimi',
     vendor: 'Moonshot AI',
-    description: 'Kimi Code para Claude Code usando el endpoint Anthropic oficial de Kimi.',
+    description: 'Kimi Code para Claude Code usando el endpoint Anthropic oficial de Kimi a través del gateway local.',
     docsUrl: 'https://www.kimi.com/code/docs/en/more/third-party-agents.html',
     docsVerifiedAt: '2026-04-01',
     baseUrl: 'https://api.kimi.com/coding/',
@@ -447,7 +447,7 @@ const seedProviders = [
         contextWindow: '262144',
         summary: 'Modelo oficial de Kimi Code para Claude Code. El modo thinking se conmuta con Tab dentro de Claude Code.',
         upstreamModelId: 'kimi-for-coding',
-        transportMode: 'direct',
+        transportMode: 'gateway',
         apiStyle: 'anthropic',
         apiBaseUrl: 'https://api.kimi.com/coding/',
         apiPath: '/v1/messages',
@@ -515,6 +515,45 @@ const seedProviders = [
         id: 'token',
         name: 'Token',
         description: 'Conexion por API key contra el endpoint Anthropic oficial del proveedor.',
+        credentialKind: 'env_var',
+        sortOrder: 1,
+        isDefault: 1
+      }
+    ]
+  },
+  {
+    id: 'openrouter',
+    name: 'OpenRouter',
+    vendor: 'OpenRouter',
+    description: 'OpenRouter con el router gratuito openrouter/free para usar inferencia sin costo y dejar que OpenRouter seleccione un modelo free compatible con la solicitud.',
+    docsUrl: 'https://openrouter.ai/openrouter/free/activity',
+    docsVerifiedAt: '2026-04-01',
+    baseUrl: 'https://openrouter.ai/api/v1',
+    defaultModelId: 'openrouter-free',
+    defaultAuthMethodId: 'token',
+    defaultApiKeyEnvVar: 'OPENROUTER_API_KEY',
+    models: [
+      {
+        id: 'openrouter-free',
+        name: 'OpenRouter Free Router',
+        category: 'Free Router',
+        contextWindow: '200K',
+        summary: 'Router gratuito de OpenRouter. Usa el modelo upstream openrouter/free y deja que el proveedor elija un modelo free compatible con herramientas, vision u otras capacidades.',
+        upstreamModelId: 'openrouter/free',
+        transportMode: 'gateway',
+        apiStyle: 'openai-chat',
+        apiBaseUrl: 'https://openrouter.ai/api/v1',
+        apiPath: '/chat/completions',
+        authEnvMode: 'auth_token',
+        sortOrder: 1,
+        isDefault: 1
+      }
+    ],
+    authMethods: [
+      {
+        id: 'token',
+        name: 'Token',
+        description: 'Conexion por API key contra el endpoint OpenAI-compatible oficial de OpenRouter.',
         credentialKind: 'env_var',
         sortOrder: 1,
         isDefault: 1

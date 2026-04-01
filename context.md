@@ -14,6 +14,7 @@ La app hoy ya soporta:
 - proveedor `Zen`
 - proveedor `Kimi`
 - proveedor `DeepSeek`
+- proveedor `OpenRouter`
 - proveedor `Qwen`
 - autenticación por `Token`
 - autenticación por `OAuth` para `Qwen`
@@ -106,6 +107,18 @@ Nota:
 - base URL usada por Claude Code: `https://api.deepseek.com/anthropic`
 - integración: directa sobre Claude Code
 
+### OpenRouter
+
+- provider id: `openrouter`
+- modelo: `openrouter/free`
+- auth: `token`
+- base URL del proveedor: `https://openrouter.ai/api/v1`
+- integración: a través de gateway local Anthropic-compatible
+
+Fuente oficial:
+
+- https://openrouter.ai/openrouter/free/activity
+
 ### Qwen
 
 - provider id: `qwen`
@@ -134,8 +147,9 @@ Si el perfil activado es:
 - `OpenCode Go` con modelo `chat/completions`: Claude usa el gateway local
 - `Zen` con modelo Anthropic: Claude usa endpoint directo de Zen
 - `Zen` con modelo `chat/completions`: Claude usa el gateway local
-- `Kimi`: Claude usa endpoint directo de Kimi
+- `Kimi`: Claude usa el gateway local y reenvia al endpoint Anthropic de Kimi
 - `DeepSeek`: Claude usa endpoint directo Anthropic-compatible de DeepSeek
+- `OpenRouter`: Claude usa el gateway local y envía `openrouter/free`
 - `Qwen`: Claude usa el gateway local en `127.0.0.1:4310`
 
 También existen estas opciones en el menú:

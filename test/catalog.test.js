@@ -2,11 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createCatalogStore } from '../src/data/catalog-store.js';
 
-test('sqlite catalog seeds opencode-go, zen, kimi, deepseek and qwen providers with models and auth', () => {
+test('sqlite catalog seeds opencode-go, zen, kimi, deepseek, openrouter and qwen providers with models and auth', () => {
   const store = createCatalogStore({ filename: ':memory:' });
   const providers = store.getProviders();
 
-  assert.equal(providers.length, 5);
+  assert.equal(providers.length, 6);
 
   const opencodeGo = store.getProviderCatalog('opencode-go');
   assert.ok(opencodeGo);
@@ -43,7 +43,8 @@ test('sqlite catalog seeds opencode-go, zen, kimi, deepseek and qwen providers w
   assert.equal(kimi.baseUrl, 'https://api.kimi.com/coding/');
   assert.equal(kimi.models.length, 1);
   assert.equal(kimi.models[0].id, 'kimi-for-coding');
-  assert.equal(kimi.models[0].transportMode, 'direct');
+  assert.equal(kimi.models[0].transportMode, 'gateway');
+  assert.equal(kimi.models[0].apiStyle, 'anthropic');
   assert.equal(kimi.authMethods.length, 1);
   assert.equal(kimi.authMethods[0].id, 'token');
   assert.equal(kimi.oauth, null);
@@ -58,6 +59,18 @@ test('sqlite catalog seeds opencode-go, zen, kimi, deepseek and qwen providers w
   assert.equal(deepseek.models[1].id, 'deepseek-reasoner');
   assert.equal(deepseek.models[0].transportMode, 'direct');
   assert.equal(deepseek.oauth, null);
+
+  const openrouter = store.getProviderCatalog('openrouter');
+  assert.ok(openrouter);
+  assert.equal(openrouter.baseUrl, 'https://openrouter.ai/api/v1');
+  assert.equal(openrouter.models.length, 1);
+  assert.equal(openrouter.authMethods.length, 1);
+  assert.equal(openrouter.authMethods[0].id, 'token');
+  assert.equal(openrouter.models[0].id, 'openrouter-free');
+  assert.equal(openrouter.models[0].upstreamModelId, 'openrouter/free');
+  assert.equal(openrouter.models[0].transportMode, 'gateway');
+  assert.equal(openrouter.models[0].apiStyle, 'openai-chat');
+  assert.equal(openrouter.oauth, null);
 
   const qwen = store.getProviderCatalog('qwen');
   assert.ok(qwen);

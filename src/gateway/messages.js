@@ -52,6 +52,90 @@ function normalizeBlocks(content) {
   return [content];
 }
 
+function detectImageMediaTypeFromBase64(base64Data, mediaType = '') {
+  if (mediaType !== 'application/octet-stream' || typeof base64Data !== 'string' || base64Data.length === 0) {
+    return mediaType;
+  }
+
+  const buffer = Buffer.from(base64Data, 'base64');
+  const header = buffer.subarray(0, 16);
+
+  if (header.length >= 8
+    && header[0] === 0x89
+    && header[1] === 0x50
+    && header[2] === 0x4e
+    && header[3] === 0x47
+    && header[4] === 0x0d
+    && header[5] === 0x0a
+    && header[6] === 0x1a
+    && header[7] === 0x0a) {
+    return 'image/png';
+  }
+
+  if (header.length >= 3
+    && header[0] === 0xff
+    && header[1] === 0xd8
+    && header[2] === 0xff) {
+    return 'image/jpeg';
+  }
+
+  if (header.length >= 6
+    && (buffer.subarray(0, 6).toString('ascii') === 'GIF87a'
+      || buffer.subarray(0, 6).toString('ascii') === 'GIF89a')) {
+    return 'image/gif';
+  }
+
+  if (header.length >= 12
+    && buffer.subarray(0, 4).toString('ascii') === 'RIFF'
+    && buffer.subarray(8, 12).toString('ascii') === 'WEBP') {
+    return 'image/webp';
+  }
+
+  return mediaType;
+}
+
+function normalizeAnthropicContentBlock(block) {
+  if (!isObject(block) || block.type !== 'image' || !isObject(block.source)) {
+    return block;
+  }
+
+  if (block.source.type !== 'base64' || typeof block.source.data !== 'string') {
+    return block;
+  }
+
+  const mediaType = detectImageMediaTypeFromBase64(block.source.data, block.source.media_type);
+
+  if (mediaType === block.source.media_type) {
+    return block;
+  }
+
+  return {
+    ...block,
+    source: {
+      ...block.source,
+      media_type: mediaType
+    }
+  };
+}
+
+export function normalizeAnthropicRequestForUpstream(body) {
+  if (!isObject(body)) {
+    return body;
+  }
+
+  return {
+    ...body,
+    messages: Array.isArray(body.messages)
+      ? body.messages.map((message) => ({
+          ...message,
+          content: Array.isArray(message?.content)
+            ? message.content.map((block) => normalizeAnthropicContentBlock(block))
+            : message?.content
+        }))
+      : body.messages
+  };
+}
+
 function buildOpenAIContentPartFromAnthropicBlock(block) {
   if (typeof block === 'string') {
     return {
@@ -76,12 +160,15 @@ function buildOpenAIContentPartFromAnthropicBlock(block) {
 
   if (block.type === 'image') {
     const source = isObject(block.source) ? block.source : {};
+    let mediaType = typeof source.media_type === 'string' ? source.media_type : '';
 
-    if (source.type === 'base64' && typeof source.data === 'string' && typeof source.media_type === 'string') {
+    if (source.type === 'base64' && typeof source.data === 'string' && mediaType.length > 0) {
+      mediaType = detectImageMediaTypeFromBase64(source.data, mediaType);
+
       return {
         type: 'image_url',
         image_url: {
-          url: `data:${source.media_type};base64,${source.data}`
+          url: `data:${mediaType};base64,${source.data}`
         }
       };
     }

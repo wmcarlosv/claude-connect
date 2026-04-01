@@ -136,6 +136,37 @@ test('buildOpenAIRequestFromAnthropic maps anthropic image blocks to openai imag
   });
 });
 
+test('buildOpenAIRequestFromAnthropic normalizes octet-stream images to detected png mime', () => {
+  const pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aRr0AAAAASUVORK5CYII=';
+  const request = buildOpenAIRequestFromAnthropic({
+    model: 'kimi-for-coding',
+    body: {
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: 'application/octet-stream',
+                data: pngBase64
+              }
+            }
+          ]
+        }
+      ]
+    }
+  });
+
+  assert.deepEqual(request.messages[0].content[0], {
+    type: 'image_url',
+    image_url: {
+      url: `data:image/png;base64,${pngBase64}`
+    }
+  });
+});
+
 test('buildAnthropicMessageFromOpenAI maps tool calls back to anthropic blocks', () => {
   const message = buildAnthropicMessageFromOpenAI({
     requestedModel: 'qwen3-coder-plus',

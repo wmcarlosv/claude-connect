@@ -132,7 +132,9 @@ export async function resolveClaudeTransportForProfile({
   gatewayBaseUrl = 'http://127.0.0.1:4310/anthropic'
 }) {
   const authMethod = profile.auth.method === 'api_key' ? 'token' : profile.auth.method;
-  const modelTransportMode = profile?.model?.transportMode ?? 'gateway';
+  const modelTransportMode = profile?.provider?.id === 'kimi'
+    ? 'gateway'
+    : profile?.model?.transportMode ?? 'gateway';
   const modelApiBaseUrl = typeof profile?.model?.apiBaseUrl === 'string' && profile.model.apiBaseUrl.length > 0
     ? profile.model.apiBaseUrl
     : profile?.endpoint?.baseUrl;

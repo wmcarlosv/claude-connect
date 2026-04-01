@@ -9,6 +9,7 @@ import {
   buildAnthropicMessageFromOpenAI,
   buildOpenAIRequestFromAnthropic,
   estimateTokenCountFromAnthropicRequest,
+  normalizeAnthropicRequestForUpstream,
   writeAnthropicStreamFromMessage
 } from './messages.js';
 import { gatewayBasePath, gatewayBaseUrl, gatewayHost, gatewayPort } from './constants.js';
@@ -134,6 +135,16 @@ function getUpstreamModelId(profile) {
   return profile?.model?.upstreamModelId ?? profile?.model?.id ?? 'unknown';
 }
 
+function resolveGatewayUpstreamConfig(profile) {
+  return {
+    upstreamBaseUrl: typeof profile?.model?.apiBaseUrl === 'string' && profile.model.apiBaseUrl.length > 0
+      ? profile.model.apiBaseUrl
+      : profile?.endpoint?.baseUrl,
+    upstreamApiStyle: profile?.model?.apiStyle ?? 'openai-chat',
+    upstreamApiPath: profile?.model?.apiPath ?? '/chat/completions'
+  };
+}
+
 function buildOauthApiBaseUrl(profile, tokenRecord) {
   if (typeof profile?.auth?.oauth?.apiBaseUrl === 'string' && profile.auth.oauth.apiBaseUrl.length > 0) {
     return profile.auth.oauth.apiBaseUrl;
@@ -176,14 +187,14 @@ async function resolveGatewayContext() {
       throw new Error(`Falta la variable de entorno ${envVar} y tampoco hay una API key guardada para este perfil.`);
     }
 
+    const upstream = resolveGatewayUpstreamConfig(profile);
+
     return {
       profile,
       authMethod,
-      upstreamBaseUrl: typeof profile?.model?.apiBaseUrl === 'string' && profile.model.apiBaseUrl.length > 0
-        ? profile.model.apiBaseUrl
-        : profile.endpoint.baseUrl,
-      upstreamApiStyle: profile?.model?.apiStyle ?? 'openai-chat',
-      upstreamApiPath: profile?.model?.apiPath ?? '/chat/completions',
+      upstreamBaseUrl: upstream.upstreamBaseUrl,
+      upstreamApiStyle: upstream.upstreamApiStyle,
+      upstreamApiPath: upstream.upstreamApiPath,
       accessToken: token.trim()
     };
   }
@@ -224,23 +235,17 @@ async function resolveGatewayContext() {
   throw new Error(`Metodo de autenticacion no soportado por el gateway: ${authMethod}`);
 }
 
-async function forwardChatCompletion({ openAiRequest, context, refreshOnUnauthorized = true }) {
-  const targetUrl = `${context.upstreamBaseUrl.replace(/\/$/, '')}${context.upstreamApiPath || '/chat/completions'}`;
+async function forwardUpstreamRequest({ targetUrl, headers, payload, context, refreshOnUnauthorized = true }) {
   const response = await fetch(targetUrl, {
     method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      accept: 'application/json',
-      authorization: `Bearer ${context.accessToken}`,
-      'user-agent': 'claude-connect-gateway/0.1.0'
-    },
-    body: JSON.stringify(openAiRequest)
+    headers,
+    body: JSON.stringify(payload)
   });
 
-  const payload = await response.json().catch(() => ({}));
+  const responsePayload = await response.json().catch(() => ({}));
 
   if (response.ok) {
-    return payload;
+    return responsePayload;
   }
 
   if (response.status === 401 && refreshOnUnauthorized && context.authMethod === 'oauth') {
@@ -250,8 +255,13 @@ async function forwardChatCompletion({ openAiRequest, context, refreshOnUnauthor
       clientId: context.profile.auth.oauth.clientId
     });
 
-    return forwardChatCompletion({
-      openAiRequest,
+    return forwardUpstreamRequest({
+      targetUrl,
+      headers: {
+        ...headers,
+        authorization: `Bearer ${refreshed.token.access_token}`
+      },
+      payload,
       context: {
         ...context,
         accessToken: refreshed.token.access_token
@@ -260,9 +270,57 @@ async function forwardChatCompletion({ openAiRequest, context, refreshOnUnauthor
     });
   }
 
-  const message = payload?.error?.message || payload?.message || payload?.error || `HTTP ${response.status}`;
+  const message = responsePayload?.error?.message
+    || responsePayload?.message
+    || responsePayload?.error
+    || `HTTP ${response.status}`;
   const providerName = context?.profile?.provider?.name ?? context?.profile?.provider?.id ?? 'El proveedor';
+  const containsImageInput = Array.isArray(payload?.messages)
+    && payload.messages.some((messageItem) => Array.isArray(messageItem?.content)
+      && messageItem.content.some((part) => part?.type === 'image_url' || part?.type === 'image'));
+
+  if (containsImageInput && typeof message === 'string' && message.includes("prompt_tokens")) {
+    throw new Error(
+      `${providerName} rechazo esta imagen. El modelo o endpoint actual probablemente no soporta entrada visual en esta integracion.`
+    );
+  }
+
   throw new Error(`${providerName} devolvio un error: ${message}`);
+}
+
+async function forwardChatCompletion({ openAiRequest, context, refreshOnUnauthorized = true }) {
+  const targetUrl = `${context.upstreamBaseUrl.replace(/\/$/, '')}${context.upstreamApiPath || '/chat/completions'}`;
+
+  return forwardUpstreamRequest({
+    targetUrl,
+    headers: {
+      'content-type': 'application/json',
+      accept: 'application/json',
+      authorization: `Bearer ${context.accessToken}`,
+      'user-agent': 'claude-connect-gateway/0.1.0'
+    },
+    payload: openAiRequest,
+    context,
+    refreshOnUnauthorized
+  });
+}
+
+async function forwardAnthropicMessage({ requestBody, context, refreshOnUnauthorized = true }) {
+  const targetUrl = `${context.upstreamBaseUrl.replace(/\/$/, '')}${context.upstreamApiPath || '/v1/messages'}`;
+
+  return forwardUpstreamRequest({
+    targetUrl,
+    headers: {
+      'content-type': 'application/json',
+      accept: 'application/json',
+      'anthropic-version': '2023-06-01',
+      'x-api-key': context.accessToken,
+      'user-agent': 'claude-connect-gateway/0.1.0'
+    },
+    payload: normalizeAnthropicRequestForUpstream(requestBody),
+    context,
+    refreshOnUnauthorized
+  });
 }
 
 function buildHealthPayload(context) {
@@ -316,6 +374,15 @@ async function handleCountTokens(request, response) {
 async function handleMessages(request, response) {
   const body = await readJsonBody(request);
   const context = await resolveGatewayContext();
+
+  if (context.upstreamApiStyle === 'anthropic') {
+    const upstreamResponse = await forwardAnthropicMessage({
+      requestBody: body,
+      context
+    });
+    sendJson(response, 200, upstreamResponse);
+    return;
+  }
 
   if (context.upstreamApiStyle !== 'openai-chat') {
     throw new Error(`El gateway todavia no soporta el estilo ${context.upstreamApiStyle} para ${context.profile.provider.name}.`);

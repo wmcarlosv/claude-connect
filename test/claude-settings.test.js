@@ -143,6 +143,25 @@ test('buildClaudeSettingsForProfile supports kimi direct anthropic mode', () => 
   store.close();
 });
 
+test('resolveClaudeTransportForProfile forces kimi through the gateway', async () => {
+  const store = createCatalogStore({ filename: ':memory:' });
+  const provider = store.getProviderCatalog('kimi');
+  const profile = buildProfile({
+    provider,
+    model: provider.models[0],
+    authMethod: provider.authMethods[0],
+    profileName: 'kimi-for-coding-token',
+    apiKeyEnvVar: 'KIMI_API_KEY'
+  });
+  const transport = await resolveClaudeTransportForProfile({ profile });
+
+  assert.equal(transport.connectionMode, 'gateway');
+  assert.equal(transport.connectionBaseUrl, 'http://127.0.0.1:4310/anthropic');
+  assert.equal(transport.authToken, 'claude-connect-local');
+
+  store.close();
+});
+
 test('resolveClaudeTransportForProfile supports zen direct anthropic models', async () => {
   const store = createCatalogStore({ filename: ':memory:' });
   const provider = store.getProviderCatalog('zen');
