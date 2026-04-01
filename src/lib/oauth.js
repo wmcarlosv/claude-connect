@@ -13,12 +13,24 @@ function isObject(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+export function buildBrowserOpenCommands(url, platform = process.platform) {
+  if (platform === 'darwin') {
+    return [['open', [url]]];
+  }
+
+  if (platform === 'win32') {
+    return [
+      ['explorer.exe', [url]],
+      ['rundll32.exe', ['url.dll,FileProtocolHandler', url]],
+      ['powershell.exe', ['-NoProfile', '-Command', 'Start-Process', url]]
+    ];
+  }
+
+  return [['xdg-open', [url]], ['gio', ['open', url]]];
+}
+
 function openBrowser(url) {
-  const commands = process.platform === 'darwin'
-    ? [['open', [url]]]
-    : process.platform === 'win32'
-      ? [['cmd', ['/c', 'start', '', url]]]
-      : [['xdg-open', [url]], ['gio', ['open', url]]];
+  const commands = buildBrowserOpenCommands(url);
 
   return new Promise((resolve) => {
     let index = 0;
