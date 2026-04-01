@@ -3,7 +3,6 @@
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import process from 'node:process';
-import { run } from '../src/index.js';
 
 const alreadyRestarted = process.env.CLAUDE_CONNECT_NO_WARNINGS === '1';
 
@@ -32,9 +31,11 @@ if (!alreadyRestarted && !process.execArgv.includes('--no-warnings=ExperimentalW
     process.exit(1);
   });
 } else {
-  run().catch((error) => {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(`\nclaude-connect: ${message}`);
-    process.exitCode = 1;
-  });
+  import('../src/index.js')
+    .then(({ run }) => run())
+    .catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`\nclaude-connect: ${message}`);
+      process.exitCode = 1;
+    });
 }
