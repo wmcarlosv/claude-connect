@@ -1,83 +1,94 @@
 # Claude Connect
 
-CLI en Node.js para conectar `Claude Code` con proveedores externos desde una interfaz de consola.
+> Conecta `Claude Code` con `Kimi`, `DeepSeek` y `Qwen` desde una interfaz de consola clara, rápida y reversible.
 
-Paquete en npm:
+[![npm version](https://img.shields.io/npm/v/claude-connect?style=for-the-badge&logo=npm&color=cb3837)](https://www.npmjs.com/package/claude-connect)
+[![node](https://img.shields.io/badge/node-%3E%3D22-2f7d32?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
+[![license](https://img.shields.io/badge/license-MIT-0f172a?style=for-the-badge)](./LICENSE)
+[![providers](https://img.shields.io/badge/providers-Kimi%20%7C%20DeepSeek%20%7C%20Qwen-0ea5e9?style=for-the-badge)](https://www.npmjs.com/package/claude-connect)
 
-- https://www.npmjs.com/package/claude-connect
+## Why Claude Connect
 
-## Estado actual
+`Claude Connect` te permite cambiar `Claude Code` hacia otros proveedores sin editar archivos a mano, sin perder tu configuración original y sin convertir tu terminal en un caos de variables de entorno.
 
-La app ya soporta:
+### Highlights
 
-- `Kimi` por `API key`
-- `DeepSeek` por `API key`
-- `Qwen` por `OAuth` o `Token`
-- catálogo local en SQLite sembrado automáticamente desde código
-- creación, edición y eliminación de conexiones
+- `Kimi`, `DeepSeek` y `Qwen` listos desde el primer arranque
+- soporte para `Token` y `OAuth` cuando el proveedor lo permite
 - activación reversible sobre la instalación real de `Claude Code`
-- detección automática de rutas en Linux y Windows
+- limpieza automática del conflicto entre `claude.ai` y `ANTHROPIC_API_KEY`
 - gateway local Anthropic-compatible para `Qwen`
-- limpieza y restauración reversible de credenciales de `claude.ai` para evitar `Auth conflict`
-- navegación con `Volver` en pantallas y salida por doble `Esc`
+- detección automática de rutas en Linux y Windows
+- catálogo local en SQLite generado automáticamente
+- interfaz de consola con navegación simple y profesional
 
-## Uso
+## Package
 
-Arranque local:
+- npm: https://www.npmjs.com/package/claude-connect
+- repo: https://github.com/wmcarlosv/claude-connect
 
-```bash
-npm start
-```
+## Install
 
-Para exponer el comando globalmente:
-
-```bash
-npm link
-claude-connect
-```
-
-Instalación desde npm:
+Instalación global:
 
 ```bash
 npm install -g claude-connect
 claude-connect
 ```
 
-Instalación simple:
+Instalación simple en proyecto:
 
 ```bash
 npm i claude-connect
 ```
 
-Ejecución sin instalación global:
+Ejecución con `npx`:
 
 ```bash
 npx claude-connect
 ```
 
+Desarrollo local:
+
+```bash
+npm start
+```
+
 Requisito:
 
-- Node.js 22 o superior
+- `Node.js 22` o superior
 
-## Flujo principal
+## Quick Flow
 
-1. `Nueva conexion`
-2. elegir proveedor
-3. elegir modelo
-4. elegir tipo de conexión: `OAuth` o `Token`
-5. guardar perfil local
-6. `Activar en Claude`
-7. usar `claude`
+```text
+Nueva conexion
+  -> proveedor
+  -> modelo
+  -> OAuth o Token
+  -> guardar perfil
+  -> Activar en Claude
+  -> usar claude
+```
 
 Al activar:
 
-- `Kimi` usa `https://api.kimi.com/coding/`
-- `DeepSeek` usa `https://api.deepseek.com/anthropic`
-- `Qwen` usa el gateway local `http://127.0.0.1:4310/anthropic`
+- `Kimi` apunta a `https://api.kimi.com/coding/`
+- `DeepSeek` apunta a `https://api.deepseek.com/anthropic`
+- `Qwen` apunta al gateway local `http://127.0.0.1:4310/anthropic`
 
-## Dónde se guarda cada cosa
+## Providers
 
-Claude Connect guarda estado local fuera del repo. Por defecto:
+| Proveedor | Modelos | Auth | Integración |
+| --- | --- | --- | --- |
+| `Kimi` | `kimi-for-coding` | `Token` | Directa |
+| `DeepSeek` | `deepseek-chat`, `deepseek-reasoner` | `Token` | Directa |
+| `Qwen` | `qwen3-coder-plus` | `OAuth`, `Token` | Gateway local |
+
+## What It Stores
+
+Claude Connect guarda el estado sensible fuera del repo.
+
+Rutas por defecto:
 
 ```text
 Linux: ~/.claude-connect
@@ -90,7 +101,7 @@ Ahí viven:
 - tokens OAuth
 - API keys gestionadas por la app
 - estado del switch de Claude
-- estado y logs del gateway
+- logs y estado del gateway
 
 El catálogo SQLite local se genera automáticamente en:
 
@@ -101,62 +112,50 @@ storage/claude-connect.sqlite
 Importante:
 
 - esa base ya no se versiona en git
-- el catálogo se reconstruye desde `src/data/catalog-store.js`
-- un `git pull` no debería volver a darte conflicto por la base SQLite
+- el catálogo se siembra desde `src/data/catalog-store.js`
+- esto evita conflictos molestos al hacer `git pull`
 
-## Switch de Claude Code
+## Claude Code Switching
 
-La activación modifica la configuración real detectada de Claude Code y guarda un snapshot reversible.
+Cuando activas un perfil, la app modifica la configuración real detectada de `Claude Code` y guarda un snapshot reversible.
 
 Archivos implicados:
 
-- `settings.json` de Claude
+- `settings.json`
 - `~/.claude.json`
-- `.credentials.json` de Claude
+- `.credentials.json`
 
-Esto permite:
+Eso permite:
 
-- activar `Kimi`, `DeepSeek` o `Qwen`
-- evitar conflicto entre `claude.ai` y `ANTHROPIC_API_KEY`
-- restaurar la sesión original con `Revertir Claude`
+- activar otro proveedor sin tocar archivos manualmente
+- evitar el `Auth conflict` entre sesión `claude.ai` y `API key`
+- volver a tu estado original con `Revertir Claude`
 
-## Proveedores
+## Qwen OAuth
 
-### Kimi
+`Qwen` usa el device flow oficial de `Qwen Code`.
 
-- modelo: `kimi-for-coding`
-- auth: `Token`
-- base URL: `https://api.kimi.com/coding/`
-- activación directa en Claude Code
-
-### DeepSeek
-
-- modelos: `deepseek-chat`, `deepseek-reasoner`
-- auth: `Token`
-- base URL de activación: `https://api.deepseek.com/anthropic`
-- activación directa en Claude Code
-
-### Qwen
-
-- modelo: `qwen3-coder-plus`
-- auth: `OAuth`, `Token`
-- OAuth con device flow oficial de `Qwen Code`
-- gateway local requerido para integrarlo con Claude Code
-
-URL de autorización típica:
+URL típica de autorización:
 
 ```text
 https://chat.qwen.ai/auth?user_code=XXXXX&client=qwen-code
 ```
 
-## Navegación
+Comportamiento actual:
 
-- `Tab` vuelve a la pantalla anterior cuando aplica
+- intenta abrir el navegador por defecto
+- también deja la URL visible para copiar y pegar manualmente
+- en Windows ya se corrigió la apertura del navegador
+
+## Console UX
+
 - `Volver` aparece como opción visible en listas
+- `Tab` vuelve a la pantalla anterior cuando aplica
 - `Esc` una vez avisa
 - `Esc` dos veces sale
+- después de crear o editar una conexión, regresas al menú principal
 
-## Desarrollo
+## Development
 
 Pruebas:
 
@@ -164,22 +163,21 @@ Pruebas:
 npm test
 ```
 
-Entrada principal:
+Puntos principales del código:
 
-- `src/wizard.js`
+- entrada principal: `src/wizard.js`
+- catálogo: `src/data/catalog-store.js`
+- switch de Claude: `src/lib/claude-settings.js`
+- OAuth de Qwen: `src/lib/oauth.js`
+- gateway local: `src/gateway/server.js`
 
-Catálogo:
+## Publish Notes
 
-- `src/data/catalog-store.js`
+El paquete npm publica solo lo necesario:
 
-Switch de Claude:
+- `bin/claude-connect.js`
+- `src/`
+- `README.md`
+- `LICENSE`
 
-- `src/lib/claude-settings.js`
-
-OAuth Qwen:
-
-- `src/lib/oauth.js`
-
-Gateway local:
-
-- `src/gateway/server.js`
+El tarball ya está preparado para distribución limpia.
