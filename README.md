@@ -45,11 +45,12 @@ Windows: %APPDATA%\claude-connect
 
 Importante:
 
-- el repo versiona solo el catalogo SQLite en `storage/claude-connect.sqlite`
+- el repo no versiona la base SQLite local
+- el catalogo se siembra automaticamente desde `src/data/catalog-store.js`
 - los perfiles, tokens OAuth, API keys y estado del gateway viven fuera del repo, en el directorio local de cada usuario
 - cada persona que descargue el proyecto maneja su propia configuracion y sus propias credenciales
 
-El catalogo SQLite se crea en:
+La base SQLite local del catalogo se crea en:
 
 ```text
 storage/claude-connect.sqlite
@@ -80,9 +81,9 @@ El menu principal ahora permite:
 
 Importante para `Kimi`:
 
-- ya no se activa sobre tu `settings.json` global
-- `claude-connect` prepara un runtime aislado para evitar conflicto con una sesion abierta de `claude.ai`
-- puedes lanzarlo con `claude-kimi` o con `claude-connect launch-profile kimi-kimi-for-coding-token`
+- al activarlo, `claude-connect` conmuta temporalmente tu instalacion real de `Claude Code`
+- tambien limpia de forma reversible las credenciales locales de `claude.ai` para evitar el `Auth conflict`
+- `Revertir Claude` restaura tanto `settings.json` como las credenciales originales de la sesion
 
 Claude Connect preserva la configuracion original en el directorio detectado de Claude Connect, dentro de:
 

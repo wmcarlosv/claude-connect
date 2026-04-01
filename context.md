@@ -30,10 +30,10 @@ Hoy la app ya soporta:
 - almacenamiento local opcional de API keys para perfiles por token
 - guardado de perfiles y tokens localmente
 - activación reversible sobre la configuración real de `Claude Code`
-- runtime aislado para `Kimi`, separado de la sesion normal de `claude.ai`
+- limpieza reversible de las credenciales reales de `claude.ai` al activar `Kimi`
 - gateway local `Anthropic-compatible`
 - soporte de descubrimiento de rutas para Linux y Windows
-- versionado del catalogo SQLite dentro del repo sin incluir credenciales de usuarios
+- catalogo SQLite generado localmente desde seeds sin versionar la base de datos binaria
 
 ## Flujo principal actual
 
@@ -65,10 +65,6 @@ Archivo principal:
 
 - `src/data/catalog-store.js`
 
-Archivo versionado en el repo:
-
-- `storage/claude-connect.sqlite`
-
 Se usa SQLite para guardar:
 
 - proveedores
@@ -76,7 +72,7 @@ Se usa SQLite para guardar:
 - métodos de autenticación
 - configuración OAuth por proveedor
 
-El repo comparte ese catalogo base, pero no comparte perfiles, tokens ni API keys de usuarios.
+El repo comparte las seeds del catalogo en codigo, pero no comparte perfiles, tokens, API keys ni la base SQLite generada de cada usuario.
 
 Actualmente el catálogo siembra dos proveedores:
 

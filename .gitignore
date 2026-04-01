@@ -1,7 +1,6 @@
 node_modules/
 .DS_Store
-storage/*
-!storage/claude-connect.sqlite
+storage/
 coverage/
 .env
 npm-debug.log*
