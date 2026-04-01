@@ -13,6 +13,156 @@ function isObject(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function parseJsonText(value) {
+  if (typeof value !== 'string') {
+    return {};
+  }
+
+  const trimmed = value.trim();
+
+  if (trimmed.length === 0) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(trimmed);
+  } catch (_error) {
+    return {};
+  }
+}
+
+function describeRequestError(error) {
+  if (!(error instanceof Error)) {
+    return String(error);
+  }
+
+  const parts = [error.message];
+  const cause = error.cause;
+
+  if (cause && typeof cause === 'object') {
+    const code = 'code' in cause && typeof cause.code === 'string' ? cause.code : null;
+    const message = 'message' in cause && typeof cause.message === 'string' ? cause.message : null;
+
+    if (code) {
+      parts.push(`code=${code}`);
+    }
+
+    if (message && message !== error.message) {
+      parts.push(message);
+    }
+  }
+
+  return parts.join(' · ');
+}
+
+export function buildCurlCommand(url, { method = 'GET', headers = {}, body = null } = {}, platform = process.platform) {
+  const command = platform === 'win32' ? 'curl.exe' : 'curl';
+  const args = [
+    '--silent',
+    '--show-error',
+    '--location',
+    '--request',
+    method,
+    '--output',
+    '-',
+    '--write-out',
+    '\n%{http_code}',
+    url
+  ];
+
+  for (const [name, value] of Object.entries(headers)) {
+    args.push('--header', `${name}: ${value}`);
+  }
+
+  if (typeof body === 'string') {
+    args.push('--data-raw', body);
+  }
+
+  return {
+    command,
+    args
+  };
+}
+
+async function runCommandJson({ command, args }) {
+  return await new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk.toString();
+    });
+
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code !== 0) {
+        reject(new Error(stderr.trim() || `${command} termino con codigo ${code}.`));
+        return;
+      }
+
+      resolve({
+        stdout,
+        stderr
+      });
+    });
+  });
+}
+
+async function requestJson(url, { method = 'GET', headers = {}, body = null } = {}) {
+  try {
+    const response = await fetch(url, {
+      method,
+      headers,
+      body,
+      signal: AbortSignal.timeout(20000)
+    });
+    const raw = await response.text();
+
+    return {
+      ok: response.ok,
+      status: response.status,
+      payload: parseJsonText(raw)
+    };
+  } catch (fetchError) {
+    if (process.platform !== 'win32') {
+      throw new Error(`No se pudo conectar con ${url}: ${describeRequestError(fetchError)}`);
+    }
+
+    try {
+      const curlRequest = buildCurlCommand(url, { method, headers, body });
+      const result = await runCommandJson({
+        command: curlRequest.command,
+        args: curlRequest.args
+      });
+      const separatorIndex = result.stdout.lastIndexOf('\n');
+      const rawBody = separatorIndex === -1 ? result.stdout : result.stdout.slice(0, separatorIndex);
+      const rawStatus = separatorIndex === -1 ? '' : result.stdout.slice(separatorIndex + 1).trim();
+      const status = Number(rawStatus);
+
+      if (!Number.isFinite(status) || status <= 0) {
+        throw new Error('curl devolvio una respuesta sin codigo HTTP interpretable.');
+      }
+
+      return {
+        ok: status >= 200 && status < 300,
+        status,
+        payload: parseJsonText(rawBody)
+      };
+    } catch (curlError) {
+      throw new Error(
+        `No se pudo conectar con ${url}: fetch=${describeRequestError(fetchError)} · curl=${describeRequestError(curlError)}`
+      );
+    }
+  }
+}
+
 export function buildBrowserOpenCommands(url, platform = process.platform) {
   if (platform === 'darwin') {
     return [['open', [url]]];
@@ -73,8 +223,7 @@ function generatePKCEPair() {
 
 async function requestDeviceCode(oauthConfig) {
   const { codeVerifier, codeChallenge } = generatePKCEPair();
-
-  const response = await fetch(oauthConfig.deviceCodeUrl, {
+  const response = await requestJson(oauthConfig.deviceCodeUrl, {
     method: 'POST',
     headers: {
       'content-type': 'application/x-www-form-urlencoded',
@@ -87,8 +236,7 @@ async function requestDeviceCode(oauthConfig) {
       code_challenge_method: 'S256'
     })
   });
-
-  const payload = await response.json().catch(() => ({}));
+  const payload = response.payload;
 
   if (!response.ok) {
     const message = payload.error_description || payload.error || `HTTP ${response.status}`;
@@ -106,7 +254,7 @@ async function pollForToken({ oauthConfig, deviceCode, codeVerifier, expiresInSe
   let pollIntervalMs = 2000;
 
   while (Date.now() - startedAt < expiresInSeconds * 1000) {
-    const response = await fetch(oauthConfig.tokenUrl, {
+    const response = await requestJson(oauthConfig.tokenUrl, {
       method: 'POST',
       headers: {
         'content-type': 'application/x-www-form-urlencoded',
@@ -119,8 +267,7 @@ async function pollForToken({ oauthConfig, deviceCode, codeVerifier, expiresInSe
         code_verifier: codeVerifier
       })
     });
-
-    const payload = await response.json().catch(() => ({}));
+    const payload = response.payload;
 
     if (response.ok && payload.access_token) {
       return payload;
@@ -264,7 +411,7 @@ export async function refreshOAuthToken({ filePath, tokenUrl, clientId }) {
     throw new Error('No hay refresh_token disponible para renovar la sesion OAuth.');
   }
 
-  const response = await fetch(tokenUrl, {
+  const response = await requestJson(tokenUrl, {
     method: 'POST',
     headers: {
       'content-type': 'application/x-www-form-urlencoded',
@@ -276,8 +423,7 @@ export async function refreshOAuthToken({ filePath, tokenUrl, clientId }) {
       client_id: clientId
     })
   });
-
-  const payload = await response.json().catch(() => ({}));
+  const payload = response.payload;
 
   if (!response.ok || !payload.access_token) {
     const message = payload.error_description || payload.error || `HTTP ${response.status}`;
