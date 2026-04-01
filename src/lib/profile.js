@@ -25,6 +25,7 @@ export function buildProfile({ provider, model, authMethod, profileName, apiKeyE
     },
     model: {
       id: model.id,
+      upstreamModelId: model.upstreamModelId ?? model.id,
       name: model.name,
       contextWindow: model.contextWindow,
       transportMode: model.transportMode,

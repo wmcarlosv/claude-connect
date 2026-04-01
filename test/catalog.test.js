@@ -2,11 +2,27 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createCatalogStore } from '../src/data/catalog-store.js';
 
-test('sqlite catalog seeds zen, kimi, deepseek and qwen providers with models and auth', () => {
+test('sqlite catalog seeds opencode-go, zen, kimi, deepseek and qwen providers with models and auth', () => {
   const store = createCatalogStore({ filename: ':memory:' });
   const providers = store.getProviders();
 
-  assert.equal(providers.length, 4);
+  assert.equal(providers.length, 5);
+
+  const opencodeGo = store.getProviderCatalog('opencode-go');
+  assert.ok(opencodeGo);
+  assert.equal(opencodeGo.baseUrl, 'https://opencode.ai/zen/go');
+  assert.equal(opencodeGo.authMethods.length, 1);
+  assert.equal(opencodeGo.authMethods[0].id, 'token');
+  assert.equal(opencodeGo.oauth, null);
+  assert.equal(opencodeGo.models.length, 4);
+  assert.equal(opencodeGo.models[0].id, 'opencode-go-minimax-m2.5');
+  assert.equal(opencodeGo.models[0].upstreamModelId, 'minimax-m2.5');
+  assert.equal(opencodeGo.models[0].transportMode, 'direct');
+  assert.equal(opencodeGo.models[0].apiStyle, 'anthropic');
+  assert.equal(opencodeGo.models[2].id, 'opencode-go-kimi-k2.5');
+  assert.equal(opencodeGo.models[2].upstreamModelId, 'kimi-k2.5');
+  assert.equal(opencodeGo.models[2].transportMode, 'gateway');
+  assert.equal(opencodeGo.models[2].apiStyle, 'openai-chat');
 
   const zen = store.getProviderCatalog('zen');
   assert.ok(zen);

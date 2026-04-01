@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS models (
   category TEXT NOT NULL,
   context_window TEXT NOT NULL,
   summary TEXT NOT NULL,
+  upstream_model_id TEXT,
   transport_mode TEXT NOT NULL DEFAULT 'gateway',
   api_style TEXT NOT NULL DEFAULT 'openai-chat',
   api_base_url TEXT,
@@ -65,6 +66,90 @@ CREATE TABLE IF NOT EXISTS provider_oauth_configs (
 
 const seedProviders = [
   {
+    id: 'opencode-go',
+    name: 'OpenCode Go',
+    vendor: 'OpenCode',
+    description: 'Suscripcion OpenCode Go con modelos abiertos de programacion. Algunos modelos van directos por messages y otros por gateway en chat/completions.',
+    docsUrl: 'https://opencode.ai/docs/es/go/',
+    docsVerifiedAt: '2026-04-01',
+    baseUrl: 'https://opencode.ai/zen/go',
+    defaultModelId: 'minimax-m2.5',
+    defaultAuthMethodId: 'token',
+    defaultApiKeyEnvVar: 'OPENCODE_API_KEY',
+    models: [
+      {
+        id: 'opencode-go-glm-5',
+        name: 'GLM 5',
+        category: 'OpenAI-compatible',
+        contextWindow: 'Auto',
+        summary: 'Modelo de OpenCode Go servido por chat/completions y usado a través del gateway local.',
+        upstreamModelId: 'glm-5',
+        transportMode: 'gateway',
+        apiStyle: 'openai-chat',
+        apiBaseUrl: 'https://opencode.ai/zen/go/v1',
+        apiPath: '/chat/completions',
+        authEnvMode: 'auth_token',
+        sortOrder: 1,
+        isDefault: 0
+      },
+      {
+        id: 'opencode-go-kimi-k2.5',
+        name: 'Kimi K2.5',
+        category: 'OpenAI-compatible',
+        contextWindow: 'Auto',
+        summary: 'Modelo de OpenCode Go servido por chat/completions y usado a través del gateway local.',
+        upstreamModelId: 'kimi-k2.5',
+        transportMode: 'gateway',
+        apiStyle: 'openai-chat',
+        apiBaseUrl: 'https://opencode.ai/zen/go/v1',
+        apiPath: '/chat/completions',
+        authEnvMode: 'auth_token',
+        sortOrder: 2,
+        isDefault: 0
+      },
+      {
+        id: 'opencode-go-minimax-m2.7',
+        name: 'MiniMax M2.7',
+        category: 'Anthropic',
+        contextWindow: 'Auto',
+        summary: 'Modelo de OpenCode Go servido por messages y usado directamente por Claude Code.',
+        upstreamModelId: 'minimax-m2.7',
+        transportMode: 'direct',
+        apiStyle: 'anthropic',
+        apiBaseUrl: 'https://opencode.ai/zen/go',
+        apiPath: '/v1/messages',
+        authEnvMode: 'api_key',
+        sortOrder: 3,
+        isDefault: 0
+      },
+      {
+        id: 'opencode-go-minimax-m2.5',
+        name: 'MiniMax M2.5',
+        category: 'Anthropic',
+        contextWindow: 'Auto',
+        summary: 'Modelo de OpenCode Go servido por messages y usado directamente por Claude Code.',
+        upstreamModelId: 'minimax-m2.5',
+        transportMode: 'direct',
+        apiStyle: 'anthropic',
+        apiBaseUrl: 'https://opencode.ai/zen/go',
+        apiPath: '/v1/messages',
+        authEnvMode: 'api_key',
+        sortOrder: 4,
+        isDefault: 1
+      }
+    ],
+    authMethods: [
+      {
+        id: 'token',
+        name: 'Token',
+        description: 'Conexion por API key de OpenCode para la suscripcion Go.',
+        credentialKind: 'env_var',
+        sortOrder: 1,
+        isDefault: 1
+      }
+    ]
+  },
+  {
     id: 'zen',
     name: 'OpenCode Zen',
     vendor: 'OpenCode',
@@ -82,6 +167,7 @@ const seedProviders = [
         category: 'Anthropic',
         contextWindow: '200K+',
         summary: 'Modelo Anthropic servido por Zen en el endpoint messages.',
+        upstreamModelId: 'claude-opus-4-6',
         transportMode: 'direct',
         apiStyle: 'anthropic',
         apiBaseUrl: 'https://opencode.ai/zen',
@@ -96,6 +182,7 @@ const seedProviders = [
         category: 'Anthropic',
         contextWindow: '200K+',
         summary: 'Modelo Anthropic servido por Zen en el endpoint messages.',
+        upstreamModelId: 'claude-opus-4-5',
         transportMode: 'direct',
         apiStyle: 'anthropic',
         apiBaseUrl: 'https://opencode.ai/zen',
@@ -110,6 +197,7 @@ const seedProviders = [
         category: 'Anthropic',
         contextWindow: '200K+',
         summary: 'Modelo Anthropic servido por Zen en el endpoint messages.',
+        upstreamModelId: 'claude-opus-4-1',
         transportMode: 'direct',
         apiStyle: 'anthropic',
         apiBaseUrl: 'https://opencode.ai/zen',
@@ -124,6 +212,7 @@ const seedProviders = [
         category: 'Anthropic',
         contextWindow: '200K+',
         summary: 'Modelo Anthropic servido por Zen en el endpoint messages.',
+        upstreamModelId: 'claude-sonnet-4-6',
         transportMode: 'direct',
         apiStyle: 'anthropic',
         apiBaseUrl: 'https://opencode.ai/zen',
@@ -138,6 +227,7 @@ const seedProviders = [
         category: 'Anthropic',
         contextWindow: '200K+',
         summary: 'Modelo Anthropic servido por Zen en el endpoint messages.',
+        upstreamModelId: 'claude-sonnet-4-5',
         transportMode: 'direct',
         apiStyle: 'anthropic',
         apiBaseUrl: 'https://opencode.ai/zen',
@@ -152,6 +242,7 @@ const seedProviders = [
         category: 'Anthropic',
         contextWindow: '200K+',
         summary: 'Modelo Anthropic servido por Zen en el endpoint messages.',
+        upstreamModelId: 'claude-sonnet-4',
         transportMode: 'direct',
         apiStyle: 'anthropic',
         apiBaseUrl: 'https://opencode.ai/zen',
@@ -166,6 +257,7 @@ const seedProviders = [
         category: 'Anthropic',
         contextWindow: '200K+',
         summary: 'Modelo Anthropic servido por Zen en el endpoint messages.',
+        upstreamModelId: 'claude-haiku-4-5',
         transportMode: 'direct',
         apiStyle: 'anthropic',
         apiBaseUrl: 'https://opencode.ai/zen',
@@ -180,6 +272,7 @@ const seedProviders = [
         category: 'Anthropic',
         contextWindow: '200K+',
         summary: 'Modelo Anthropic servido por Zen en el endpoint messages.',
+        upstreamModelId: 'claude-3-5-haiku',
         transportMode: 'direct',
         apiStyle: 'anthropic',
         apiBaseUrl: 'https://opencode.ai/zen',
@@ -194,6 +287,7 @@ const seedProviders = [
         category: 'OpenAI-compatible',
         contextWindow: 'Auto',
         summary: 'Modelo servido por Zen en chat/completions y usado a través del gateway local.',
+        upstreamModelId: 'minimax-m2.5',
         transportMode: 'gateway',
         apiStyle: 'openai-chat',
         apiBaseUrl: 'https://opencode.ai/zen/v1',
@@ -208,6 +302,7 @@ const seedProviders = [
         category: 'OpenAI-compatible',
         contextWindow: 'Auto',
         summary: 'Modelo gratis servido por Zen en chat/completions y usado a través del gateway local.',
+        upstreamModelId: 'minimax-m2.5-free',
         transportMode: 'gateway',
         apiStyle: 'openai-chat',
         apiBaseUrl: 'https://opencode.ai/zen/v1',
@@ -222,6 +317,7 @@ const seedProviders = [
         category: 'OpenAI-compatible',
         contextWindow: 'Auto',
         summary: 'Modelo servido por Zen en chat/completions y usado a través del gateway local.',
+        upstreamModelId: 'glm-5',
         transportMode: 'gateway',
         apiStyle: 'openai-chat',
         apiBaseUrl: 'https://opencode.ai/zen/v1',
@@ -236,6 +332,7 @@ const seedProviders = [
         category: 'OpenAI-compatible',
         contextWindow: 'Auto',
         summary: 'Modelo servido por Zen en chat/completions y usado a través del gateway local.',
+        upstreamModelId: 'kimi-k2.5',
         transportMode: 'gateway',
         apiStyle: 'openai-chat',
         apiBaseUrl: 'https://opencode.ai/zen/v1',
@@ -250,6 +347,7 @@ const seedProviders = [
         category: 'OpenAI-compatible',
         contextWindow: 'Auto',
         summary: 'Modelo servido por Zen en chat/completions y usado a través del gateway local.',
+        upstreamModelId: 'big-pickle',
         transportMode: 'gateway',
         apiStyle: 'openai-chat',
         apiBaseUrl: 'https://opencode.ai/zen/v1',
@@ -264,6 +362,7 @@ const seedProviders = [
         category: 'OpenAI-compatible',
         contextWindow: 'Auto',
         summary: 'Modelo gratis servido por Zen en chat/completions y usado a través del gateway local.',
+        upstreamModelId: 'mimo-v2-pro-free',
         transportMode: 'gateway',
         apiStyle: 'openai-chat',
         apiBaseUrl: 'https://opencode.ai/zen/v1',
@@ -278,6 +377,7 @@ const seedProviders = [
         category: 'OpenAI-compatible',
         contextWindow: 'Auto',
         summary: 'Modelo gratis servido por Zen en chat/completions y usado a través del gateway local.',
+        upstreamModelId: 'mimo-v2-omni-free',
         transportMode: 'gateway',
         apiStyle: 'openai-chat',
         apiBaseUrl: 'https://opencode.ai/zen/v1',
@@ -292,6 +392,7 @@ const seedProviders = [
         category: 'OpenAI-compatible',
         contextWindow: 'Auto',
         summary: 'Modelo gratis servido por Zen en chat/completions y usado a través del gateway local.',
+        upstreamModelId: 'qwen3.6-plus-free',
         transportMode: 'gateway',
         apiStyle: 'openai-chat',
         apiBaseUrl: 'https://opencode.ai/zen/v1',
@@ -306,6 +407,7 @@ const seedProviders = [
         category: 'OpenAI-compatible',
         contextWindow: 'Auto',
         summary: 'Modelo gratis servido por Zen en chat/completions y usado a través del gateway local.',
+        upstreamModelId: 'nemotron-3-super-free',
         transportMode: 'gateway',
         apiStyle: 'openai-chat',
         apiBaseUrl: 'https://opencode.ai/zen/v1',
@@ -344,6 +446,7 @@ const seedProviders = [
         category: 'Coding',
         contextWindow: '262144',
         summary: 'Modelo oficial de Kimi Code para Claude Code. El modo thinking se conmuta con Tab dentro de Claude Code.',
+        upstreamModelId: 'kimi-for-coding',
         transportMode: 'direct',
         apiStyle: 'anthropic',
         apiBaseUrl: 'https://api.kimi.com/coding/',
@@ -382,6 +485,7 @@ const seedProviders = [
         category: 'General',
         contextWindow: '128K',
         summary: 'Modo no razonador de DeepSeek V3.2, apto como opcion base para Claude Code.',
+        upstreamModelId: 'deepseek-chat',
         transportMode: 'direct',
         apiStyle: 'anthropic',
         apiBaseUrl: 'https://api.deepseek.com/anthropic',
@@ -396,6 +500,7 @@ const seedProviders = [
         category: 'Reasoning',
         contextWindow: '128K',
         summary: 'Modo razonador de DeepSeek V3.2 con soporte de Tool Calls segun la documentacion oficial.',
+        upstreamModelId: 'deepseek-reasoner',
         transportMode: 'direct',
         apiStyle: 'anthropic',
         apiBaseUrl: 'https://api.deepseek.com/anthropic',
@@ -434,6 +539,7 @@ const seedProviders = [
         category: 'Coding',
         contextWindow: 'Auto',
         summary: 'Modelo fijo para esta primera version, siguiendo el flujo de Qwen Code.',
+        upstreamModelId: 'qwen3-coder-plus',
         transportMode: 'gateway',
         apiStyle: 'openai-chat',
         apiBaseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
@@ -495,16 +601,18 @@ function seedCatalog(db) {
   const insertModel = db.prepare(`
     INSERT INTO models (
       id, provider_id, name, category, context_window, summary,
+      upstream_model_id,
       transport_mode, api_style, api_base_url, api_path, auth_env_mode,
       sort_order, is_default
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       provider_id = excluded.provider_id,
       name = excluded.name,
       category = excluded.category,
       context_window = excluded.context_window,
       summary = excluded.summary,
+      upstream_model_id = excluded.upstream_model_id,
       transport_mode = excluded.transport_mode,
       api_style = excluded.api_style,
       api_base_url = excluded.api_base_url,
@@ -574,6 +682,7 @@ function seedCatalog(db) {
           model.category,
           model.contextWindow,
           model.summary,
+          model.upstreamModelId ?? model.id,
           model.transportMode ?? 'gateway',
           model.apiStyle ?? 'openai-chat',
           model.apiBaseUrl ?? null,
@@ -650,9 +759,15 @@ function ensureSchemaMigrations(db) {
     alterStatements.push(`ALTER TABLE models ADD COLUMN auth_env_mode TEXT NOT NULL DEFAULT 'auth_token'`);
   }
 
+  if (!modelColumns.has('upstream_model_id')) {
+    alterStatements.push(`ALTER TABLE models ADD COLUMN upstream_model_id TEXT`);
+  }
+
   for (const statement of alterStatements) {
     db.exec(statement);
   }
+
+  db.exec(`UPDATE models SET upstream_model_id = id WHERE upstream_model_id IS NULL OR upstream_model_id = ''`);
 }
 
 function mapProviderRow(row) {
@@ -680,6 +795,7 @@ function mapModelRow(row) {
     category: row.category,
     contextWindow: row.context_window,
     summary: row.summary,
+    upstreamModelId: row.upstream_model_id ?? row.id,
     transportMode: row.transport_mode,
     apiStyle: row.api_style,
     apiBaseUrl: row.api_base_url,

@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import { spawn } from 'node:child_process';
 import { gatewayBaseUrl } from './constants.js';
 import { resolveClaudeConnectPaths } from '../lib/app-paths.js';
 
@@ -50,6 +51,57 @@ export function isProcessAlive(pid) {
 
     throw error;
   }
+}
+
+function runCommand(command, args) {
+  return new Promise((resolve) => {
+    const child = spawn(command, args, {
+      stdio: ['ignore', 'pipe', 'ignore'],
+      windowsHide: true
+    });
+
+    let stdout = '';
+
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk.toString('utf8');
+    });
+
+    child.once('error', () => resolve(''));
+    child.once('close', () => resolve(stdout));
+  });
+}
+
+function parsePidList(raw) {
+  return [...raw.matchAll(/\b(\d+)\b/g)]
+    .map((match) => Number(match[1]))
+    .filter((pid) => Number.isInteger(pid) && pid > 0);
+}
+
+export async function findListeningPidByPort(port) {
+  if (!Number.isInteger(port) || port <= 0) {
+    return null;
+  }
+
+  if (process.platform === 'win32') {
+    const raw = await runCommand('netstat', ['-ano', '-p', 'tcp']);
+    const pattern = new RegExp(`^\\s*TCP\\s+[^\\s]+:${port}\\s+[^\\s]+\\s+LISTENING\\s+(\\d+)\\s*$`, 'im');
+    const match = raw.match(pattern);
+    const pid = Number(match?.[1] ?? 0);
+    return Number.isInteger(pid) && pid > 0 ? pid : null;
+  }
+
+  const ssOutput = await runCommand('ss', ['-lntp']);
+  const ssPattern = new RegExp(`:${port}\\s+.*pid=(\\d+)`);
+  const ssMatch = ssOutput.match(ssPattern);
+  const ssPid = Number(ssMatch?.[1] ?? 0);
+
+  if (Number.isInteger(ssPid) && ssPid > 0) {
+    return ssPid;
+  }
+
+  const lsofOutput = await runCommand('lsof', ['-ti', `tcp:${port}`, '-sTCP:LISTEN']);
+  const [lsofPid] = parsePidList(lsofOutput);
+  return Number.isInteger(lsofPid) && lsofPid > 0 ? lsofPid : null;
 }
 
 async function probeGatewayHealth(timeoutMs) {

@@ -10,6 +10,7 @@ La app hoy ya soporta:
 
 - interfaz interactiva de consola
 - catálogo local en SQLite
+- proveedor `OpenCode Go`
 - proveedor `Zen`
 - proveedor `Kimi`
 - proveedor `DeepSeek`
@@ -18,7 +19,7 @@ La app hoy ya soporta:
 - autenticación por `OAuth` para `Qwen`
 - perfiles locales reutilizables
 - edición y eliminación de conexiones guardadas
-- guardado local opcional de API keys para perfiles por token
+- guardado local opcional de API keys compartidas por proveedor
 - gateway local Anthropic-compatible
 - activación reversible sobre la instalación real de `Claude Code`
 - snapshot y restauración de:
@@ -29,6 +30,27 @@ La app hoy ya soporta:
 - navegación con `Volver` y confirmación de salida con doble `Esc`
 
 ## Proveedores activos
+
+### OpenCode Go
+
+- provider id: `opencode-go`
+- auth: `token`
+- base URL del proveedor: `https://opencode.ai/zen/go`
+- variable sugerida: `OPENCODE_API_KEY`
+- integración: mixta
+
+Modelos OpenCode Go soportados hoy:
+
+- directos por `messages`:
+  - `minimax-m2.7`
+  - `minimax-m2.5`
+- OpenAI-compatible vía gateway:
+  - `glm-5`
+  - `kimi-k2.5`
+
+Fuente oficial:
+
+- https://opencode.ai/docs/es/go/
 
 ### Zen
 
@@ -101,12 +123,15 @@ Nota:
 2. seleccionar proveedor
 3. seleccionar modelo
 4. seleccionar tipo de conexión
-5. guardar perfil local
-6. `Activar en Claude`
-7. abrir `claude`
+5. guardar API key una sola vez por proveedor si aplica
+6. guardar perfil local
+7. `Activar en Claude`
+8. abrir `claude`
 
 Si el perfil activado es:
 
+- `OpenCode Go` con modelo `messages`: Claude usa endpoint directo de Go
+- `OpenCode Go` con modelo `chat/completions`: Claude usa el gateway local
 - `Zen` con modelo Anthropic: Claude usa endpoint directo de Zen
 - `Zen` con modelo `chat/completions`: Claude usa el gateway local
 - `Kimi`: Claude usa endpoint directo de Kimi
@@ -176,7 +201,7 @@ Ahí se guardan:
 
 - perfiles
 - tokens OAuth
-- API keys administradas por la app
+- API keys administradas por proveedor
 - estado del switch
 - estado y logs del gateway
 
@@ -237,6 +262,7 @@ Archivos principales:
 
 Se usa hoy para:
 
+- `OpenCode Go` en sus modelos `chat/completions`
 - `Qwen`
 - `Zen` en sus modelos `chat/completions`
 

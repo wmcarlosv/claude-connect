@@ -246,6 +246,8 @@ export async function resolveClaudeConnectPaths(options = {}) {
     claudeConnectHome,
     profilesDir: path.join(claudeConnectHome, 'profiles'),
     tokensDir: path.join(claudeConnectHome, 'tokens'),
+    secretsDir: path.join(claudeConnectHome, 'secrets'),
+    providerSecretsDir: path.join(claudeConnectHome, 'secrets', 'providers'),
     claudeCodeDir: path.join(claudeConnectHome, 'claude-code'),
     gatewayDir: path.join(claudeConnectHome, 'gateway'),
     gatewayStatePath: path.join(claudeConnectHome, 'gateway', 'state.json'),

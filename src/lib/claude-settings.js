@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { resolveClaudePaths } from './app-paths.js';
-import { readManagedTokenSecret } from './secrets.js';
+import { readManagedProviderTokenSecret, readManagedTokenSecret } from './secrets.js';
 
 function isObject(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -106,6 +106,15 @@ async function resolveTokenValueForProfile(profile) {
     return envToken.trim();
   }
 
+  const providerSecretRecord = await readManagedProviderTokenSecret(profile?.provider?.id);
+  const providerToken = typeof providerSecretRecord?.secret?.token === 'string'
+    ? providerSecretRecord.secret.token
+    : '';
+
+  if (providerToken.trim().length > 0) {
+    return providerToken.trim();
+  }
+
   if (typeof profile?.auth?.secretFile === 'string') {
     const secret = await readManagedTokenSecret(profile.auth.secretFile);
     const secretToken = typeof secret?.token === 'string' ? secret.token : '';
@@ -173,8 +182,9 @@ export function buildClaudeSettingsForProfile({
   const next = structuredClone(baseSettings);
   const env = isObject(next.env) ? { ...next.env } : {};
   const authMethod = profile.auth.method === 'api_key' ? 'token' : profile.auth.method;
+  const configuredModelId = profile?.model?.upstreamModelId ?? profile.model.id;
 
-  next.model = profile.model.id;
+  next.model = configuredModelId;
   env.ANTHROPIC_BASE_URL = connectionBaseUrl;
   delete env.ANTHROPIC_AUTH_TOKEN;
   delete env.ANTHROPIC_API_KEY;
@@ -188,7 +198,7 @@ export function buildClaudeSettingsForProfile({
   env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = 1;
   env.CLAUDE_CONNECT_ACTIVE_PROFILE = profile.profileName;
   env.CLAUDE_CONNECT_PROVIDER = profile.provider.id;
-  env.CLAUDE_CONNECT_MODEL = profile.model.id;
+  env.CLAUDE_CONNECT_MODEL = configuredModelId;
   env.CLAUDE_CONNECT_AUTH_METHOD = authMethod;
   env.CLAUDE_CONNECT_CONNECTION_MODE = connectionMode;
   delete env.ENABLE_TOOL_SEARCH;

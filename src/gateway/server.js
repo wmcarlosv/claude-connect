@@ -12,18 +12,71 @@ import {
   writeAnthropicStreamFromMessage
 } from './messages.js';
 import { gatewayBasePath, gatewayBaseUrl, gatewayHost, gatewayPort } from './constants.js';
-import { getGatewayStatus, readGatewayState, writeGatewayState, isProcessAlive } from './state.js';
+import {
+  findListeningPidByPort,
+  getGatewayStatus,
+  readGatewayState,
+  writeGatewayState,
+  isProcessAlive
+} from './state.js';
 import { resolveClaudeConnectPaths } from '../lib/app-paths.js';
 import { readSwitchState } from '../lib/claude-settings.js';
 import { readOAuthToken, refreshOAuthToken } from '../lib/oauth.js';
 import { readProfileFile } from '../lib/profile.js';
-import { readManagedTokenSecret } from '../lib/secrets.js';
+import { readManagedProviderTokenSecret, readManagedTokenSecret } from '../lib/secrets.js';
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const cliEntryPath = path.join(projectRoot, 'bin', 'claude-connect.js');
 
 function isObject(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+async function terminatePid(pid) {
+  if (!isProcessAlive(pid)) {
+    return false;
+  }
+
+  if (process.platform === 'win32') {
+    await new Promise((resolve, reject) => {
+      const child = spawn('taskkill', ['/PID', String(pid), '/T', '/F'], {
+        stdio: 'ignore',
+        windowsHide: true
+      });
+
+      child.once('error', reject);
+      child.once('exit', (code) => {
+        if (code === 0 || code === 128) {
+          resolve();
+          return;
+        }
+
+        reject(new Error(`taskkill devolvio ${code}`));
+      });
+    });
+  } else {
+    process.kill(pid, 'SIGTERM');
+  }
+
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    if (!isProcessAlive(pid)) {
+      return true;
+    }
+  }
+
+  return !isProcessAlive(pid);
+}
+
+async function clearStaleGatewayProcess() {
+  const portPid = await findListeningPidByPort(gatewayPort);
+
+  if (!isProcessAlive(portPid)) {
+    return false;
+  }
+
+  return await terminatePid(portPid);
 }
 
 function buildErrorResponse(statusCode, message, type = 'api_error') {
@@ -77,6 +130,10 @@ function normalizeOauthResourceUrl(resourceUrl) {
   return normalized.replace(/\/$/, '');
 }
 
+function getUpstreamModelId(profile) {
+  return profile?.model?.upstreamModelId ?? profile?.model?.id ?? 'unknown';
+}
+
 function buildOauthApiBaseUrl(profile, tokenRecord) {
   if (typeof profile?.auth?.oauth?.apiBaseUrl === 'string' && profile.auth.oauth.apiBaseUrl.length > 0) {
     return profile.auth.oauth.apiBaseUrl;
@@ -104,6 +161,11 @@ async function resolveGatewayContext() {
   if (authMethod === 'token') {
     const envVar = profile?.auth?.envVar;
     let token = typeof envVar === 'string' ? process.env[envVar] : '';
+
+    if (!token || token.trim().length === 0) {
+      const providerSecretRecord = await readManagedProviderTokenSecret(profile?.provider?.id);
+      token = typeof providerSecretRecord?.secret?.token === 'string' ? providerSecretRecord.secret.token : '';
+    }
 
     if ((!token || token.trim().length === 0) && typeof profile?.auth?.secretFile === 'string') {
       const secret = await readManagedTokenSecret(profile.auth.secretFile);
@@ -209,7 +271,7 @@ function buildHealthPayload(context) {
     baseUrl: gatewayBaseUrl,
     profileName: context.profile.profileName,
     provider: context.profile.provider.id,
-    model: context.profile.model.id,
+    model: getUpstreamModelId(context.profile),
     authMethod: context.authMethod,
     upstreamBaseUrl: context.upstreamBaseUrl,
     upstreamApiStyle: context.upstreamApiStyle,
@@ -226,19 +288,20 @@ async function handleHealth(_request, response) {
 async function handleModels(_request, response) {
   const context = await resolveGatewayContext();
   const model = context.profile.model;
+  const modelId = getUpstreamModelId(context.profile);
 
   sendJson(response, 200, {
     data: [
       {
         type: 'model',
-        id: model.id,
+        id: modelId,
         display_name: model.name,
         created_at: '2026-03-31'
       }
     ],
-    first_id: model.id,
+    first_id: modelId,
     has_more: false,
-    last_id: model.id
+    last_id: modelId
   });
 }
 
@@ -259,7 +322,7 @@ async function handleMessages(request, response) {
 
   const openAiRequest = buildOpenAIRequestFromAnthropic({
     body,
-    model: context.profile.model.id
+    model: getUpstreamModelId(context.profile)
   });
   const upstreamResponse = await forwardChatCompletion({
     openAiRequest,
@@ -267,7 +330,7 @@ async function handleMessages(request, response) {
   });
   const anthropicMessage = buildAnthropicMessageFromOpenAI({
     response: upstreamResponse,
-    requestedModel: context.profile.model.id
+    requestedModel: getUpstreamModelId(context.profile)
   });
 
   if (body.stream === true) {
@@ -379,6 +442,18 @@ export async function startGatewayInBackground() {
     };
   }
 
+  const staleProcessCleared = await clearStaleGatewayProcess();
+
+  if (staleProcessCleared) {
+    await writeGatewayState({
+      active: false,
+      stoppedAt: new Date().toISOString(),
+      logPath: gatewayLogPath,
+      baseUrl: gatewayBaseUrl,
+      lastError: 'Se limpio un gateway previo que ocupaba el puerto sin responder saludablemente.'
+    });
+  }
+
   await fsPromises.mkdir(path.dirname(gatewayLogPath), { recursive: true });
   const outputFd = fs.openSync(gatewayLogPath, 'a');
   const child = spawn(process.execPath, ['--no-warnings=ExperimentalWarning', cliEntryPath, 'gateway', 'serve'], {
@@ -453,44 +528,19 @@ export async function stopGateway() {
     };
   }
 
-  if (process.platform === 'win32') {
-    await new Promise((resolve, reject) => {
-      const child = spawn('taskkill', ['/PID', String(pid), '/T', '/F'], {
-        stdio: 'ignore',
-        windowsHide: true
-      });
-
-      child.once('error', reject);
-      child.once('exit', (code) => {
-        if (code === 0 || code === 128) {
-          resolve();
-          return;
-        }
-
-        reject(new Error(`taskkill devolvio ${code}`));
-      });
+  if (await terminatePid(pid)) {
+    await writeGatewayState({
+      active: false,
+      pid,
+      stoppedAt: new Date().toISOString(),
+      logPath: gatewayLogPath
     });
-  } else {
-    process.kill(pid, 'SIGTERM');
-  }
 
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    if (!isProcessAlive(pid)) {
-      await writeGatewayState({
-        active: false,
-        pid,
-        stoppedAt: new Date().toISOString(),
-        logPath: gatewayLogPath
-      });
-
-      return {
-        stopped: true,
-        pid,
-        logPath: gatewayLogPath
-      };
-    }
+    return {
+      stopped: true,
+      pid,
+      logPath: gatewayLogPath
+    };
   }
 
   throw new Error(`No pude detener el gateway local (pid ${pid}).`);

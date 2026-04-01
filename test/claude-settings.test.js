@@ -12,6 +12,7 @@ import {
 } from '../src/lib/claude-settings.js';
 import { createCatalogStore } from '../src/data/catalog-store.js';
 import { buildProfile } from '../src/lib/profile.js';
+import { saveManagedProviderTokenSecret } from '../src/lib/secrets.js';
 
 test('buildClaudeSettingsForProfile preserves base settings and injects switch env', () => {
   const store = createCatalogStore({ filename: ':memory:' });
@@ -181,6 +182,107 @@ test('resolveClaudeTransportForProfile supports zen gateway models', async () =>
     model: provider.models.find((model) => model.id === 'kimi-k2.5'),
     authMethod: provider.authMethods[0],
     profileName: 'zen-kimi-k2-5-token',
+    apiKeyEnvVar: 'OPENCODE_API_KEY'
+  });
+  const transport = await resolveClaudeTransportForProfile({ profile });
+
+  assert.equal(transport.connectionMode, 'gateway');
+  assert.equal(transport.connectionBaseUrl, 'http://127.0.0.1:4310/anthropic');
+  assert.equal(transport.authEnvMode, 'auth_token');
+  assert.equal(transport.authToken, 'claude-connect-local');
+
+  store.close();
+});
+
+test('resolveClaudeTransportForProfile falls back to provider-level API key', async () => {
+  const tempHome = await fs.mkdtemp(path.join(os.tmpdir(), 'claude-connect-provider-secret-'));
+  const previous = {
+    CLAUDE_CONNECT_HOME: process.env.CLAUDE_CONNECT_HOME,
+    OPENCODE_API_KEY: process.env.OPENCODE_API_KEY
+  };
+  const store = createCatalogStore({ filename: ':memory:' });
+  const provider = store.getProviderCatalog('zen');
+  const profile = buildProfile({
+    provider,
+    model: provider.models.find((model) => model.id === 'claude-sonnet-4-6'),
+    authMethod: provider.authMethods[0],
+    profileName: 'zen-provider-secret-test',
+    apiKeyEnvVar: 'OPENCODE_API_KEY'
+  });
+
+  process.env.CLAUDE_CONNECT_HOME = tempHome;
+  delete process.env.OPENCODE_API_KEY;
+
+  try {
+    await saveManagedProviderTokenSecret({
+      providerId: provider.id,
+      providerName: provider.name,
+      envVar: 'OPENCODE_API_KEY',
+      token: 'provider-secret'
+    });
+
+    const transport = await resolveClaudeTransportForProfile({ profile });
+
+    assert.equal(transport.connectionMode, 'direct');
+    assert.equal(transport.authEnvMode, 'api_key');
+    assert.equal(transport.authToken, 'provider-secret');
+  } finally {
+    if (typeof previous.CLAUDE_CONNECT_HOME === 'string') {
+      process.env.CLAUDE_CONNECT_HOME = previous.CLAUDE_CONNECT_HOME;
+    } else {
+      delete process.env.CLAUDE_CONNECT_HOME;
+    }
+
+    if (typeof previous.OPENCODE_API_KEY === 'string') {
+      process.env.OPENCODE_API_KEY = previous.OPENCODE_API_KEY;
+    } else {
+      delete process.env.OPENCODE_API_KEY;
+    }
+
+    store.close();
+    await fs.rm(tempHome, { recursive: true, force: true });
+  }
+});
+
+test('resolveClaudeTransportForProfile supports opencode-go direct anthropic models', async () => {
+  const store = createCatalogStore({ filename: ':memory:' });
+  const provider = store.getProviderCatalog('opencode-go');
+  const profile = buildProfile({
+    provider,
+    model: provider.models.find((model) => model.id === 'opencode-go-minimax-m2.5'),
+    authMethod: provider.authMethods[0],
+    profileName: 'opencode-go-minimax-m2-5-token',
+    apiKeyEnvVar: 'OPENCODE_API_KEY'
+  });
+  const previous = process.env.OPENCODE_API_KEY;
+  process.env.OPENCODE_API_KEY = 'opencode-secret';
+
+  try {
+    const transport = await resolveClaudeTransportForProfile({ profile });
+
+    assert.equal(transport.connectionMode, 'direct');
+    assert.equal(transport.connectionBaseUrl, 'https://opencode.ai/zen/go');
+    assert.equal(transport.authEnvMode, 'api_key');
+    assert.equal(transport.authToken, 'opencode-secret');
+  } finally {
+    if (typeof previous === 'string') {
+      process.env.OPENCODE_API_KEY = previous;
+    } else {
+      delete process.env.OPENCODE_API_KEY;
+    }
+
+    store.close();
+  }
+});
+
+test('resolveClaudeTransportForProfile supports opencode-go gateway models', async () => {
+  const store = createCatalogStore({ filename: ':memory:' });
+  const provider = store.getProviderCatalog('opencode-go');
+  const profile = buildProfile({
+    provider,
+    model: provider.models.find((model) => model.id === 'opencode-go-kimi-k2.5'),
+    authMethod: provider.authMethods[0],
+    profileName: 'opencode-go-kimi-k2-5-token',
     apiKeyEnvVar: 'OPENCODE_API_KEY'
   });
   const transport = await resolveClaudeTransportForProfile({ profile });

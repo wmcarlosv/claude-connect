@@ -16,7 +16,12 @@ import {
   slugifyProfileName,
   updateProfileFile
 } from './lib/profile.js';
-import { deleteManagedTokenSecret, saveManagedTokenSecret } from './lib/secrets.js';
+import {
+  deleteManagedTokenSecret,
+  readManagedProviderTokenSecret,
+  readManagedTokenSecret,
+  saveManagedProviderTokenSecret
+} from './lib/secrets.js';
 import {
   assertInteractiveTerminal,
   buildFrame,
@@ -120,20 +125,64 @@ function profileItems(profiles) {
   }));
 }
 
+async function attachProviderCredentialMetadata(profiles) {
+  const providerSecrets = new Map();
+
+  for (const profile of profiles) {
+    if (profile.auth.method === 'oauth') {
+      continue;
+    }
+
+    if (!providerSecrets.has(profile.provider.id)) {
+      providerSecrets.set(profile.provider.id, await readManagedProviderTokenSecret(profile.provider.id));
+    }
+  }
+
+  return profiles.map((profile) => ({
+    ...profile,
+    providerSecretRecord: providerSecrets.get(profile.provider.id) ?? null,
+    providerCredentialConfigured: typeof providerSecrets.get(profile.provider.id)?.secret?.token === 'string'
+      && providerSecrets.get(profile.provider.id).secret.token.trim().length > 0
+  }));
+}
+
+function buildTokenDetailLines(profile) {
+  if (profile.auth.method === 'oauth') {
+    return [`Token file: ${profile.auth.oauth?.tokenFile ?? 'no encontrado'}`];
+  }
+
+  if (profile.providerCredentialConfigured) {
+    return [
+      `Credencial compartida: ${profile.providerSecretRecord?.filePath ?? profile.auth.providerSecretFile ?? 'configurada'}`,
+      `Fallback por entorno: ${profile.auth.envVar}`
+    ];
+  }
+
+  if (profile.auth.secretFile) {
+    return [
+      'API key antigua detectada en este perfil',
+      `Archivo: ${profile.auth.secretFile}`,
+      `Fallback por entorno: ${profile.auth.envVar}`
+    ];
+  }
+
+  return [`Sin API key guardada · fallback: ${profile.auth.envVar}`];
+}
+
 function profileActionItems(profile) {
   const items = [];
 
   if (profile.auth.method === 'token' || profile.auth.method === 'api_key') {
     items.push({
       label: 'Editar conexion',
-      description: 'Guardar o actualizar la API key localmente.',
+      description: 'Guardar o actualizar la API key compartida del proveedor.',
       value: 'edit-token'
     });
   }
 
   items.push({
     label: 'Eliminar conexion',
-    description: 'Borra el perfil y sus secretos administrados por Claude Connect.',
+    description: 'Borra solo el perfil. La API key compartida del proveedor se conserva.',
     value: 'delete'
   });
   items.push({
@@ -184,10 +233,10 @@ function renderWelcome() {
         colorize('4. Guardar perfil y credenciales locales', colors.soft),
         '',
         colorize('Catalogo actual', colors.bold, colors.accentSoft),
-        colorize('Zen, Kimi, DeepSeek y Qwen ya vienen almacenados en SQLite.', colors.soft),
+        colorize('OpenCode Go, Zen, Kimi, DeepSeek y Qwen ya vienen almacenados en SQLite.', colors.soft),
         '',
         colorize('Seguridad', colors.bold, colors.accentSoft),
-        colorize('El token OAuth se guarda localmente y el modo Token usa una variable de entorno.', colors.soft)
+        colorize('El token OAuth se guarda localmente y el modo Token puede guardarse una sola vez por proveedor.', colors.soft)
       ],
       footer: [colorize('Presiona cualquier tecla para entrar', colors.dim, colors.muted)]
     })
@@ -198,8 +247,10 @@ function renderSummary({ profile, filePath }) {
   const authSummary = profile.auth.method === 'oauth'
     ? `Auth: oauth con token en ${profile.auth.oauth.tokenFile}`
     : `Auth: ${profile.auth.method} con fallback en ${profile.auth.envVar}`;
-  const managedSecretSummary = profile.auth.method !== 'oauth' && profile.auth.secretFile
-    ? colorize(`API key administrada en: ${profile.auth.secretFile}`, colors.soft)
+  const managedSecretSummary = profile.auth.method !== 'oauth' && profile.auth.providerSecretFile
+    ? colorize(`API key compartida del proveedor en: ${profile.auth.providerSecretFile}`, colors.soft)
+    : profile.auth.method !== 'oauth' && profile.auth.secretFile
+      ? colorize(`API key antigua detectada en: ${profile.auth.secretFile}`, colors.soft)
     : profile.auth.method !== 'oauth'
       ? colorize(`API key no guardada localmente. Si existe ${profile.auth.envVar}, tambien se usara.`, colors.soft)
       : null;
@@ -232,7 +283,7 @@ function renderSummary({ profile, filePath }) {
               colorize(`Fallback opcional: export ${profile.auth.envVar}=<tu_token>`, colors.soft),
               colorize(`export OPENAI_BASE_URL=${profile.endpoint.baseUrl}`, colors.soft),
               colorize(`export OPENAI_MODEL=${profile.model.id}`, colors.soft),
-              colorize('Tambien puedes guardar la API key directamente en Claude Connect.', colors.soft)
+              colorize('La API key puede guardarse una sola vez por proveedor en Claude Connect.', colors.soft)
             ])
       ],
       footer: [colorize('Presiona cualquier tecla para volver al menu', colors.dim, colors.muted)]
@@ -336,7 +387,7 @@ async function showGatewayStatus() {
 }
 
 async function activateClaudeFromSavedProfile() {
-  const profiles = await listProfiles();
+  const profiles = await attachProviderCredentialMetadata(await listProfiles());
 
   if (profiles.length === 0) {
     renderInfoScreen({
@@ -355,17 +406,15 @@ async function activateClaudeFromSavedProfile() {
     totalSteps: 1,
     title: 'Activa un perfil en Claude Code',
     subtitle: 'Esto conserva tu settings.json actual y permite revertirlo.',
-    items: profileItems(profiles),
-    allowBack: true,
-    detailBuilder: (selected) => [
-      `Proveedor: ${selected.value.provider.name}`,
-      `Modelo: ${selected.value.model.id}`,
-      `Auth: ${selected.value.auth.method}`,
-      selected.value.auth.method === 'oauth'
-        ? `Token file: ${selected.value.auth.oauth?.tokenFile ?? 'no encontrado'}`
-        : `${selected.value.auth.secretFile ? 'API key guardada' : 'sin API key guardada'} · fallback: ${selected.value.auth.envVar}`
-    ]
-  });
+      items: profileItems(profiles),
+      allowBack: true,
+      detailBuilder: (selected) => [
+        `Proveedor: ${selected.value.provider.name}`,
+        `Modelo: ${selected.value.model.id}`,
+        `Auth: ${selected.value.auth.method}`,
+        ...buildTokenDetailLines(selected.value)
+      ]
+    });
 
   if (isBack(profile) || isExit(profile)) {
     return profile;
@@ -415,13 +464,16 @@ async function activateClaudeFromSavedProfile() {
 }
 
 async function editTokenProfile(profile) {
+  const providerSecretRecord = await readManagedProviderTokenSecret(profile.provider.id);
   const apiKey = await promptText({
     step: 1,
     totalSteps: 1,
-    title: 'Guardar API key',
-    subtitle: `Perfil: ${profile.profileName}. Deja vacio para conservar la API key ya guardada.`,
+    title: 'Guardar API key del proveedor',
+    subtitle: `Proveedor: ${profile.provider.name}. Esta API key se compartira con todos los modelos de este proveedor.`,
     label: 'API key',
-    placeholder: profile.auth.secretFile ? 'Deja vacio para conservar la API key guardada' : 'Pega aqui tu API key',
+    placeholder: providerSecretRecord?.secret?.token
+      ? 'Deja vacio para conservar la API key compartida'
+      : 'Pega aqui tu API key',
     secret: true,
     allowBack: true
   });
@@ -434,28 +486,50 @@ async function editTokenProfile(profile) {
   nextProfile.auth.method = profile.auth.method === 'api_key' ? 'token' : profile.auth.method;
   nextProfile.auth.envVar = nextProfile.auth.envVar || `${nextProfile.provider.id.toUpperCase()}_API_KEY`;
   nextProfile.updatedAt = new Date().toISOString();
+  let providerSecretFile = providerSecretRecord?.filePath ?? nextProfile.auth.providerSecretFile ?? '';
 
   if (apiKey.trim().length > 0) {
-    nextProfile.auth.secretFile = await saveManagedTokenSecret({
-      profileName: nextProfile.profileName,
+    providerSecretFile = await saveManagedProviderTokenSecret({
       providerId: nextProfile.provider.id,
-      modelId: nextProfile.model.id,
+      providerName: nextProfile.provider.name,
       envVar: nextProfile.auth.envVar,
       token: apiKey.trim()
     });
+  } else if (!providerSecretFile && typeof nextProfile.auth.secretFile === 'string') {
+    const legacySecret = await readManagedTokenSecret(nextProfile.auth.secretFile);
+    const legacyToken = typeof legacySecret?.token === 'string' ? legacySecret.token.trim() : '';
+
+    if (legacyToken.length > 0) {
+      providerSecretFile = await saveManagedProviderTokenSecret({
+        providerId: nextProfile.provider.id,
+        providerName: nextProfile.provider.name,
+        envVar: nextProfile.auth.envVar,
+        token: legacyToken
+      });
+    }
+  }
+
+  if (providerSecretFile) {
+    nextProfile.auth.providerSecretFile = providerSecretFile;
+  }
+
+  if (typeof nextProfile.auth.secretFile === 'string') {
+    await deleteManagedTokenSecret(nextProfile.auth.secretFile);
+    delete nextProfile.auth.secretFile;
   }
 
   await updateProfileFile(profile.filePath, nextProfile);
 
   renderInfoScreen({
     title: 'Conexion actualizada',
-    subtitle: 'El perfil ya quedo editado.',
+    subtitle: 'La credencial del proveedor ya quedo actualizada.',
     lines: [
       colorize(`Perfil: ${nextProfile.profileName}`, colors.soft),
+      colorize(`Proveedor: ${nextProfile.provider.name}`, colors.soft),
       colorize(`Fallback por entorno: ${nextProfile.auth.envVar}`, colors.soft),
       colorize(
-        nextProfile.auth.secretFile
-          ? `API key guardada en: ${nextProfile.auth.secretFile}`
+        nextProfile.auth.providerSecretFile
+          ? `API key compartida guardada en: ${nextProfile.auth.providerSecretFile}`
           : 'No se guardo una API key administrada localmente.',
         colors.soft
       )
@@ -482,7 +556,10 @@ async function deleteSavedProfile(profile) {
     subtitle: 'El perfil ya no aparece en Claude Connect.',
     lines: [
       colorize(`Perfil: ${profile.profileName}`, colors.soft),
-      colorize(`Archivo eliminado: ${profile.filePath}`, colors.soft)
+      colorize(`Archivo eliminado: ${profile.filePath}`, colors.soft),
+      ...(profile.auth?.method !== 'oauth'
+        ? [colorize('La API key compartida del proveedor se conserva para otros modelos.', colors.soft)]
+        : [])
     ],
     footer: 'Presiona una tecla para volver'
   });
@@ -491,7 +568,7 @@ async function deleteSavedProfile(profile) {
 }
 
 async function manageSavedProfiles() {
-  const profiles = await listProfiles();
+  const profiles = await attachProviderCredentialMetadata(await listProfiles());
 
   if (profiles.length === 0) {
     renderInfoScreen({
@@ -511,15 +588,13 @@ async function manageSavedProfiles() {
       totalSteps: 2,
       title: 'Gestionar conexiones',
       subtitle: 'Selecciona la conexion que quieres modificar.',
-      items: profileItems(await listProfiles()),
+      items: profileItems(await attachProviderCredentialMetadata(await listProfiles())),
       allowBack: true,
       detailBuilder: (selected) => [
         `Proveedor: ${selected.value.provider.name}`,
         `Modelo: ${selected.value.model.name}`,
         `Auth: ${selected.value.auth.method}`,
-        selected.value.auth.method === 'oauth'
-          ? `Token file: ${selected.value.auth.oauth?.tokenFile ?? 'no encontrado'}`
-          : `${selected.value.auth.secretFile ? 'API key guardada' : 'sin API key guardada'} · fallback: ${selected.value.auth.envVar}`
+        ...buildTokenDetailLines(selected.value)
       ]
     });
 
@@ -679,17 +754,20 @@ async function createNewConnection(store) {
 
       const profileName = slugifyProfileName(`${provider.id}-${model.id}-${authMethod.id}`);
       const apiKeyEnvVar = catalog.defaultApiKeyEnvVar;
-      let managedSecretFile = '';
+      let providerSecretFile = '';
       let oauthSession;
 
       if (authMethod.id === 'token') {
+        const existingProviderSecret = await readManagedProviderTokenSecret(catalog.id);
         const apiKeyValue = await promptText({
           step: totalSteps,
           totalSteps,
           title: 'API key del proveedor',
-          subtitle: `Modelo: ${model.name}. Puedes guardarla ahora o hacerlo luego en Gestionar conexiones.`,
+          subtitle: `Modelo: ${model.name}. Esta API key se compartira con todos los modelos de ${catalog.name}.`,
           label: 'API key',
-          placeholder: 'Pega aqui tu API key o deja vacio',
+          placeholder: existingProviderSecret?.secret?.token
+            ? 'Deja vacio para conservar la API key compartida'
+            : 'Pega aqui tu API key o deja vacio',
           secret: true,
           allowBack: true
         });
@@ -703,13 +781,14 @@ async function createNewConnection(store) {
         }
 
         if (apiKeyValue.trim().length > 0) {
-          managedSecretFile = await saveManagedTokenSecret({
-            profileName,
+          providerSecretFile = await saveManagedProviderTokenSecret({
             providerId: catalog.id,
-            modelId: model.id,
+            providerName: catalog.name,
             envVar: apiKeyEnvVar,
             token: apiKeyValue.trim()
           });
+        } else if (existingProviderSecret?.filePath) {
+          providerSecretFile = existingProviderSecret.filePath;
         }
       }
 
@@ -778,8 +857,8 @@ async function createNewConnection(store) {
         oauthSession
       });
 
-      if (managedSecretFile) {
-        profile.auth.secretFile = managedSecretFile;
+      if (providerSecretFile) {
+        profile.auth.providerSecretFile = providerSecretFile;
       }
 
       const filePath = await saveProfile(profile);
