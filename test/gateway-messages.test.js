@@ -136,6 +136,24 @@ test('buildOpenAIRequestFromAnthropic maps anthropic image blocks to openai imag
   });
 });
 
+test('buildOpenAIRequestFromAnthropic uses max_completion_tokens for gpt-5 models', () => {
+  const request = buildOpenAIRequestFromAnthropic({
+    model: 'gpt-5.4',
+    body: {
+      max_tokens: 4096,
+      messages: [
+        {
+          role: 'user',
+          content: 'Hola'
+        }
+      ]
+    }
+  });
+
+  assert.equal(request.max_completion_tokens, 4096);
+  assert.equal(Object.prototype.hasOwnProperty.call(request, 'max_tokens'), false);
+});
+
 test('buildOpenAIRequestFromAnthropic normalizes octet-stream images to detected png mime', () => {
   const pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aRr0AAAAASUVORK5CYII=';
   const request = buildOpenAIRequestFromAnthropic({

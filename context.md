@@ -14,6 +14,7 @@ La app hoy ya soporta:
 - proveedor `Zen`
 - proveedor `Kimi`
 - proveedor `DeepSeek`
+- proveedor `OpenAI`
 - proveedor `OpenRouter`
 - proveedor `Qwen`
 - autenticación por `Token`
@@ -108,6 +109,28 @@ Nota:
 - base URL usada por Claude Code: `https://api.deepseek.com/anthropic`
 - integración: directa sobre Claude Code
 
+### OpenAI
+
+- provider id: `openai`
+- modelos:
+  - `gpt-5.4`
+  - `gpt-5.4-mini`
+  - `gpt-5.3-codex`
+  - `gpt-5.2-codex`
+  - `gpt-5.2`
+  - `gpt-5.1-codex-max`
+  - `gpt-5.1-codex-mini`
+- auth: `token`
+- base URL del proveedor: `https://api.openai.com/v1`
+- integración: a través de gateway local Anthropic-compatible hacia `chat/completions`
+- estado: validado con una llamada real usando `gpt-5.4`
+
+Fuente oficial:
+
+- https://platform.openai.com/docs/api-reference/chat/create
+- https://platform.openai.com/docs/api-reference/authentication
+- https://developers.openai.com/api/docs/models
+
 ### OpenRouter
 
 - provider id: `openrouter`
@@ -150,6 +173,7 @@ Si el perfil activado es:
 - `Zen` con modelo `chat/completions`: Claude usa el gateway local
 - `Kimi`: Claude usa el gateway local y reenvia al endpoint Anthropic de Kimi
 - `DeepSeek`: Claude usa endpoint directo Anthropic-compatible de DeepSeek
+- `OpenAI`: Claude usa el gateway local y reenvia a `https://api.openai.com/v1/chat/completions`
 - `OpenRouter`: Claude usa el gateway local y envía `openrouter/free`
 - `Qwen`: Claude usa el gateway local en `127.0.0.1:4310`
 
@@ -279,6 +303,7 @@ Se usa hoy para:
 
 - `OpenCode Go` en sus modelos `chat/completions`
 - `Kimi`
+- `OpenAI`
 - `Qwen`
 - `Zen` en sus modelos `chat/completions`
 - `OpenRouter`

@@ -232,6 +232,10 @@ export function estimateTokenCountFromAnthropicRequest(body) {
   return Math.max(1, Math.ceil(totalLength / 4));
 }
 
+function usesMaxCompletionTokens(model) {
+  return typeof model === 'string' && /^gpt-5(?:[.-]|$)/.test(model);
+}
+
 export function buildOpenAIRequestFromAnthropic({ body, model }) {
   const messages = [];
   const systemText = collectText(body.system).trim();
@@ -323,7 +327,11 @@ export function buildOpenAIRequestFromAnthropic({ body, model }) {
   };
 
   if (typeof body.max_tokens === 'number') {
-    request.max_tokens = body.max_tokens;
+    if (usesMaxCompletionTokens(model)) {
+      request.max_completion_tokens = body.max_tokens;
+    } else {
+      request.max_tokens = body.max_tokens;
+    }
   }
 
   if (typeof body.temperature === 'number') {

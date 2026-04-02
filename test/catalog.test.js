@@ -2,11 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createCatalogStore } from '../src/data/catalog-store.js';
 
-test('sqlite catalog seeds opencode-go, zen, kimi, deepseek, openrouter and qwen providers with models and auth', () => {
+test('sqlite catalog seeds opencode-go, zen, kimi, deepseek, openai, openrouter and qwen providers with models and auth', () => {
   const store = createCatalogStore({ filename: ':memory:' });
   const providers = store.getProviders();
 
-  assert.equal(providers.length, 6);
+  assert.equal(providers.length, 7);
 
   const opencodeGo = store.getProviderCatalog('opencode-go');
   assert.ok(opencodeGo);
@@ -59,6 +59,20 @@ test('sqlite catalog seeds opencode-go, zen, kimi, deepseek, openrouter and qwen
   assert.equal(deepseek.models[1].id, 'deepseek-reasoner');
   assert.equal(deepseek.models[0].transportMode, 'direct');
   assert.equal(deepseek.oauth, null);
+
+  const openai = store.getProviderCatalog('openai');
+  assert.ok(openai);
+  assert.equal(openai.baseUrl, 'https://api.openai.com/v1');
+  assert.equal(openai.models.length, 7);
+  assert.equal(openai.authMethods.length, 1);
+  assert.equal(openai.authMethods[0].id, 'token');
+  assert.equal(openai.models[0].id, 'gpt-5.4');
+  assert.equal(openai.models[0].upstreamModelId, 'gpt-5.4');
+  assert.equal(openai.models[0].transportMode, 'gateway');
+  assert.equal(openai.models[0].apiStyle, 'openai-chat');
+  assert.equal(openai.models[2].id, 'gpt-5.3-codex');
+  assert.equal(openai.models[6].id, 'gpt-5.1-codex-mini');
+  assert.equal(openai.oauth, null);
 
   const openrouter = store.getProviderCatalog('openrouter');
   assert.ok(openrouter);
