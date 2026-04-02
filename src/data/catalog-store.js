@@ -522,6 +522,29 @@ const seedProviders = [
     ]
   },
   {
+    id: 'ollama',
+    name: 'Ollama',
+    vendor: 'Ollama',
+    description: 'Servidor Ollama autohospedado. La conexion pide una base URL manual, descubre modelos via /api/tags y luego usa Chat Completions por el gateway local.',
+    docsUrl: 'https://docs.ollama.com/openai',
+    docsVerifiedAt: '2026-04-02',
+    baseUrl: 'http://127.0.0.1:11434',
+    defaultModelId: null,
+    defaultAuthMethodId: 'server',
+    defaultApiKeyEnvVar: 'OLLAMA_API_KEY',
+    models: [],
+    authMethods: [
+      {
+        id: 'server',
+        name: 'Servidor Ollama',
+        description: 'Conexion sin API key propia de Claude Connect. Solo necesitas la URL de tu servidor Ollama local o remoto.',
+        credentialKind: 'none',
+        sortOrder: 1,
+        isDefault: 1
+      }
+    ]
+  },
+  {
     id: 'openai',
     name: 'OpenAI',
     vendor: 'OpenAI',

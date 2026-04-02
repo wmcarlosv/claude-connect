@@ -233,6 +233,41 @@ test('resolveClaudeTransportForProfile supports openai gateway models', async ()
   store.close();
 });
 
+test('resolveClaudeTransportForProfile supports ollama server profiles', async () => {
+  const store = createCatalogStore({ filename: ':memory:' });
+  const provider = store.getProviderCatalog('ollama');
+  const profile = buildProfile({
+    provider: {
+      ...provider,
+      baseUrl: 'http://127.0.0.1:11434'
+    },
+    model: {
+      id: 'qwen2.5-coder:7b',
+      name: 'qwen2.5-coder:7b',
+      category: 'Ollama OpenAI-compatible',
+      contextWindow: 'Auto',
+      summary: 'Modelo descubierto desde /api/tags',
+      upstreamModelId: 'qwen2.5-coder:7b',
+      transportMode: 'gateway',
+      apiStyle: 'openai-chat',
+      apiBaseUrl: 'http://127.0.0.1:11434',
+      apiPath: '/v1/chat/completions',
+      authEnvMode: 'auth_token'
+    },
+    authMethod: provider.authMethods[0],
+    profileName: 'ollama-qwen2-5-coder-7b-server',
+    apiKeyEnvVar: 'OLLAMA_API_KEY'
+  });
+  const transport = await resolveClaudeTransportForProfile({ profile });
+
+  assert.equal(transport.connectionMode, 'gateway');
+  assert.equal(transport.connectionBaseUrl, 'http://127.0.0.1:4310/anthropic');
+  assert.equal(transport.authEnvMode, 'auth_token');
+  assert.equal(transport.authToken, 'claude-connect-local');
+
+  store.close();
+});
+
 test('resolveClaudeTransportForProfile falls back to provider-level API key', async () => {
   const tempHome = await fs.mkdtemp(path.join(os.tmpdir(), 'claude-connect-provider-secret-'));
   const previous = {

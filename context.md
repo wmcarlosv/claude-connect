@@ -14,6 +14,7 @@ La app hoy ya soporta:
 - proveedor `Zen`
 - proveedor `Kimi`
 - proveedor `DeepSeek`
+- proveedor `Ollama`
 - proveedor `OpenAI`
 - proveedor `OpenRouter`
 - proveedor `Qwen`
@@ -109,6 +110,33 @@ Nota:
 - base URL usada por Claude Code: `https://api.deepseek.com/anthropic`
 - integración: directa sobre Claude Code
 
+### Ollama
+
+- provider id: `ollama`
+- auth: `server`
+- base URL inicial del catálogo: `http://127.0.0.1:11434`
+- integración: a través de gateway local Anthropic-compatible hacia el endpoint nativo `api/chat`
+
+Comportamiento:
+
+- la URL real se pide al crear la conexión
+- puede ser local o remota, por ejemplo `http://127.0.0.1:11434` o `https://mi-vps:11434`
+- Claude Connect consulta `/api/tags` para descubrir y seleccionar modelos
+- la conexión se valida antes de guardar el perfil
+- la implementación fue cambiada a `POST /api/chat` porque varios servidores remotos devolvían HTML o respuestas inválidas en `/v1/*`
+
+Hallazgos reales de hoy:
+
+- algunos servidores remotos responden bien a `/api/tags` pero no a inferencia real
+- algunos exponen modelos cloud que devuelven `unauthorized`
+- otros responden con texto fallback genérico como `Hello, I am a helpful assistant.`
+- esto ya no parece un fallo del bridge, sino de la instancia/modelo remoto
+
+Fuente oficial:
+
+- https://docs.ollama.com/openai
+- https://docs.ollama.com/api/tags
+
 ### OpenAI
 
 - provider id: `openai`
@@ -173,6 +201,7 @@ Si el perfil activado es:
 - `Zen` con modelo `chat/completions`: Claude usa el gateway local
 - `Kimi`: Claude usa el gateway local y reenvia al endpoint Anthropic de Kimi
 - `DeepSeek`: Claude usa endpoint directo Anthropic-compatible de DeepSeek
+- `Ollama`: Claude usa el gateway local y reenvia a la URL del servidor configurado en `/api/chat`
 - `OpenAI`: Claude usa el gateway local y reenvia a `https://api.openai.com/v1/chat/completions`
 - `OpenRouter`: Claude usa el gateway local y envía `openrouter/free`
 - `Qwen`: Claude usa el gateway local en `127.0.0.1:4310`
@@ -303,6 +332,7 @@ Se usa hoy para:
 
 - `OpenCode Go` en sus modelos `chat/completions`
 - `Kimi`
+- `Ollama`
 - `OpenAI`
 - `Qwen`
 - `Zen` en sus modelos `chat/completions`
@@ -318,13 +348,14 @@ Responsabilidades:
 - resolver el perfil activo
 - leer token OAuth o API key según el perfil
 - traducir requests Anthropic a OpenAI-compatible
+- traducir requests Anthropic al formato nativo de `Ollama` cuando el proveedor activo es `ollama`
 - normalizar algunos bloques de imagen antes de reenviar al upstream
 - reenviar al upstream correcto según el modelo
 - soportar `stream` y endpoints básicos de mensajes
 
 Limitación actual:
 
-- el gateway soporta hoy upstream tipo `openai-chat` y un pass-through Anthropic puntual para `Kimi`
+- el gateway soporta hoy upstream tipo `openai-chat`, `ollama-chat` y un pass-through Anthropic puntual para `Kimi`
 - aún no convierte a `responses` ni a endpoints tipo Google
 - formatos de imagen no soportados por el proveedor, por ejemplo `AVIF` en Kimi, seguirán fallando aunque el bridge esté bien
 

@@ -99,6 +99,10 @@ export async function readSwitchState() {
 }
 
 async function resolveTokenValueForProfile(profile) {
+  if (profile?.provider?.id === 'ollama') {
+    return 'ollama';
+  }
+
   const envVar = profile?.auth?.envVar;
   const envToken = typeof envVar === 'string' ? process.env[envVar] : '';
 
@@ -163,6 +167,16 @@ export async function resolveClaudeTransportForProfile({
     };
   }
 
+  if (authMethod === 'server') {
+    return {
+      connectionMode: 'gateway',
+      connectionBaseUrl: gatewayBaseUrl,
+      authToken: 'claude-connect-local',
+      authEnvMode: 'auth_token',
+      extraEnv: {}
+    };
+  }
+
   return {
     connectionMode: 'gateway',
     connectionBaseUrl: gatewayBaseUrl,
@@ -211,6 +225,9 @@ export function buildClaudeSettingsForProfile({
 
   if (authMethod === 'token') {
     env.CLAUDE_CONNECT_TOKEN_ENV_VAR = profile.auth.envVar;
+    delete env.CLAUDE_CONNECT_TOKEN_FILE;
+  } else if (authMethod === 'server') {
+    delete env.CLAUDE_CONNECT_TOKEN_ENV_VAR;
     delete env.CLAUDE_CONNECT_TOKEN_FILE;
   } else if (authMethod === 'oauth' && profile.auth.oauth?.tokenFile) {
     env.CLAUDE_CONNECT_TOKEN_FILE = profile.auth.oauth.tokenFile;

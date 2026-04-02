@@ -22,6 +22,7 @@ import {
   readManagedTokenSecret,
   saveManagedProviderTokenSecret
 } from './lib/secrets.js';
+import { fetchOllamaModels, normalizeOllamaBaseUrl } from './lib/ollama.js';
 import {
   assertInteractiveTerminal,
   buildFrame,
@@ -151,6 +152,13 @@ function buildTokenDetailLines(profile) {
     return [`Token file: ${profile.auth.oauth?.tokenFile ?? 'no encontrado'}`];
   }
 
+  if (profile.auth.method === 'server') {
+    return [
+      `Base URL: ${profile.endpoint?.baseUrl ?? 'sin definir'}`,
+      `Modelo upstream: ${profile.model?.upstreamModelId ?? profile.model?.id ?? 'sin definir'}`
+    ];
+  }
+
   if (profile.providerCredentialConfigured) {
     return [
       `Credencial compartida: ${profile.providerSecretRecord?.filePath ?? profile.auth.providerSecretFile ?? 'configurada'}`,
@@ -184,11 +192,6 @@ function profileActionItems(profile) {
     label: 'Eliminar conexion',
     description: 'Borra solo el perfil. La API key compartida del proveedor se conserva.',
     value: 'delete'
-  });
-  items.push({
-    label: 'Volver',
-    description: 'Regresa al menu principal.',
-    value: 'back'
   });
 
   return items;
@@ -233,7 +236,7 @@ function renderWelcome() {
         colorize('4. Guardar perfil y credenciales locales', colors.soft),
         '',
         colorize('Catalogo actual', colors.bold, colors.accentSoft),
-        colorize('OpenCode Go, Zen, Kimi, DeepSeek, OpenAI, OpenRouter y Qwen ya vienen almacenados en SQLite.', colors.soft),
+        colorize('OpenCode Go, Zen, Kimi, DeepSeek, Ollama, OpenAI, OpenRouter y Qwen ya vienen almacenados en SQLite.', colors.soft),
         '',
         colorize('Seguridad', colors.bold, colors.accentSoft),
         colorize('El token OAuth se guarda localmente y el modo Token puede guardarse una sola vez por proveedor.', colors.soft)
@@ -246,8 +249,12 @@ function renderWelcome() {
 function renderSummary({ profile, filePath }) {
   const authSummary = profile.auth.method === 'oauth'
     ? `Auth: oauth con token en ${profile.auth.oauth.tokenFile}`
-    : `Auth: ${profile.auth.method} con fallback en ${profile.auth.envVar}`;
-  const managedSecretSummary = profile.auth.method !== 'oauth' && profile.auth.providerSecretFile
+    : profile.auth.method === 'server'
+      ? 'Auth: servidor Ollama sin API key administrada por Claude Connect'
+      : `Auth: ${profile.auth.method} con fallback en ${profile.auth.envVar}`;
+  const managedSecretSummary = profile.auth.method === 'server'
+    ? colorize('Esta conexion usa solo la URL y el modelo descubiertos en el servidor Ollama.', colors.soft)
+    : profile.auth.method !== 'oauth' && profile.auth.providerSecretFile
     ? colorize(`API key compartida del proveedor en: ${profile.auth.providerSecretFile}`, colors.soft)
     : profile.auth.method !== 'oauth' && profile.auth.secretFile
       ? colorize(`API key antigua detectada en: ${profile.auth.secretFile}`, colors.soft)
@@ -279,12 +286,18 @@ function renderSummary({ profile, filePath }) {
               colorize(`export OPENAI_MODEL=${profile.model.id}`, colors.soft),
               colorize('El access token y refresh token ya quedaron guardados localmente.', colors.soft)
             ]
-          : [
-              colorize(`Fallback opcional: export ${profile.auth.envVar}=<tu_token>`, colors.soft),
-              colorize(`export OPENAI_BASE_URL=${profile.endpoint.baseUrl}`, colors.soft),
-              colorize(`export OPENAI_MODEL=${profile.model.id}`, colors.soft),
-              colorize('La API key puede guardarse una sola vez por proveedor en Claude Connect.', colors.soft)
-            ])
+          : profile.auth.method === 'server'
+            ? [
+                colorize(`export OPENAI_BASE_URL=${profile.endpoint.baseUrl}`, colors.soft),
+                colorize(`export OPENAI_MODEL=${profile.model.id}`, colors.soft),
+                colorize('La conexion usa el servidor Ollama descubierto y se valida antes de guardar.', colors.soft)
+              ]
+            : [
+                colorize(`Fallback opcional: export ${profile.auth.envVar}=<tu_token>`, colors.soft),
+                colorize(`export OPENAI_BASE_URL=${profile.endpoint.baseUrl}`, colors.soft),
+                colorize(`export OPENAI_MODEL=${profile.model.id}`, colors.soft),
+                colorize('La API key puede guardarse una sola vez por proveedor en Claude Connect.', colors.soft)
+              ])
       ],
       footer: [colorize('Presiona cualquier tecla para volver al menu', colors.dim, colors.muted)]
     })
@@ -561,7 +574,7 @@ async function deleteSavedProfile(profile) {
     lines: [
       colorize(`Perfil: ${profile.profileName}`, colors.soft),
       colorize(`Archivo eliminado: ${profile.filePath}`, colors.soft),
-      ...(profile.auth?.method !== 'oauth'
+      ...(profile.auth?.method === 'token' || profile.auth?.method === 'api_key'
         ? [colorize('La API key compartida del proveedor se conserva para otros modelos.', colors.soft)]
         : [])
     ],
@@ -703,6 +716,143 @@ async function createNewConnection(store) {
     }
 
     const catalog = store.getProviderCatalog(provider.id);
+
+    if (catalog.id === 'ollama') {
+      const ollamaBaseUrlInput = await promptText({
+        step: 2,
+        totalSteps: 4,
+        title: 'URL del servidor Ollama',
+        subtitle: 'Puede ser local o remoto, por ejemplo http://127.0.0.1:11434 o https://mi-vps:11434.',
+        label: 'Base URL',
+        defaultValue: catalog.baseUrl,
+        placeholder: catalog.baseUrl,
+        allowBack: true
+      });
+
+      if (isExit(ollamaBaseUrlInput)) {
+        return ollamaBaseUrlInput;
+      }
+
+      if (isBack(ollamaBaseUrlInput)) {
+        continue;
+      }
+
+      let normalizedOllamaBaseUrl;
+
+      try {
+        normalizedOllamaBaseUrl = normalizeOllamaBaseUrl(ollamaBaseUrlInput);
+      } catch (error) {
+        renderInfoScreen({
+          title: 'URL invalida',
+          subtitle: 'La direccion del servidor Ollama no se pudo normalizar.',
+          lines: [
+            colorize(error instanceof Error ? error.message : String(error), colors.warning)
+          ],
+          footer: 'Presiona una tecla para volver'
+        });
+
+        const invalidUrlResult = await waitForAnyKey();
+
+        if (isExit(invalidUrlResult)) {
+          return invalidUrlResult;
+        }
+
+        continue;
+      }
+
+      let discovered;
+
+      try {
+        discovered = await fetchOllamaModels({ baseUrl: normalizedOllamaBaseUrl });
+      } catch (error) {
+        renderInfoScreen({
+          title: 'No se pudo conectar a Ollama',
+          subtitle: 'Claude Connect intento consultar /api/tags para descubrir modelos.',
+          lines: [
+            colorize(`Base URL: ${normalizedOllamaBaseUrl}`, colors.soft),
+            colorize(error instanceof Error ? error.message : String(error), colors.warning)
+          ],
+          footer: 'Presiona una tecla para volver'
+        });
+
+        const failedConnectionResult = await waitForAnyKey();
+
+        if (isExit(failedConnectionResult)) {
+          return failedConnectionResult;
+        }
+
+        continue;
+      }
+
+      if (discovered.models.length === 0) {
+        renderInfoScreen({
+          title: 'Sin modelos en Ollama',
+          subtitle: 'La conexion esta viva, pero /api/tags no devolvio modelos disponibles.',
+          lines: [
+            colorize(`Base URL: ${normalizedOllamaBaseUrl}`, colors.soft),
+            colorize('Carga al menos un modelo en ese servidor y vuelve a intentarlo.', colors.soft)
+          ],
+          footer: 'Presiona una tecla para volver'
+        });
+
+        const emptyModelsResult = await waitForAnyKey();
+
+        if (isExit(emptyModelsResult)) {
+          return emptyModelsResult;
+        }
+
+        continue;
+      }
+
+      const discoveredModel = await selectFromList({
+        step: 3,
+        totalSteps: 4,
+        title: 'Selecciona el modelo de Ollama',
+        subtitle: `Servidor: ${normalizedOllamaBaseUrl}.`,
+        items: modelItems(discovered.models),
+        allowBack: true,
+        detailBuilder: (selected) => [
+          `Modelo: ${selected.value.id}`,
+          `Categoria: ${selected.value.category}`,
+          `Contexto: ${selected.value.contextWindow}`,
+          selected.value.summary
+        ]
+      });
+
+      if (isExit(discoveredModel)) {
+        return discoveredModel;
+      }
+
+      if (isBack(discoveredModel)) {
+        continue;
+      }
+
+      const authMethod = catalog.authMethods[0];
+      const profileName = slugifyProfileName(`${provider.id}-${discoveredModel.id}-${authMethod.id}`);
+      const customProvider = {
+        ...catalog,
+        baseUrl: normalizedOllamaBaseUrl
+      };
+      const profile = buildProfile({
+        provider: customProvider,
+        model: {
+          ...discoveredModel,
+          apiBaseUrl: normalizedOllamaBaseUrl,
+          apiPath: '/api/chat',
+          transportMode: 'gateway',
+          apiStyle: 'ollama-chat',
+          authEnvMode: 'auth_token'
+        },
+        authMethod,
+        profileName,
+        apiKeyEnvVar: catalog.defaultApiKeyEnvVar
+      });
+
+      const filePath = await saveProfile(profile);
+      renderSummary({ profile, filePath });
+      return await waitForAnyKey();
+    }
+
     const totalSteps = catalog.models.length > 1 ? 3 : 2;
     let model = catalog.models[0];
 

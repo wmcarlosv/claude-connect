@@ -36,6 +36,7 @@
     "anthropic",
     "deepseek",
     "kimi",
+    "ollama",
     "openai",
     "qwen",
     "terminal"

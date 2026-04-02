@@ -1,11 +1,11 @@
 # Claude Connect
 
-> Conecta `Claude Code` con `OpenCode Go`, `Zen`, `Kimi`, `DeepSeek`, `OpenAI`, `OpenRouter` y `Qwen` desde una interfaz de consola clara, rápida y reversible.
+> Conecta `Claude Code` con `OpenCode Go`, `Zen`, `Kimi`, `DeepSeek`, `Ollama`, `OpenAI`, `OpenRouter` y `Qwen` desde una interfaz de consola clara, rápida y reversible.
 
 [![npm version](https://img.shields.io/npm/v/claude-connect?style=for-the-badge&logo=npm&color=cb3837)](https://www.npmjs.com/package/claude-connect)
 [![node](https://img.shields.io/badge/node-%3E%3D22-2f7d32?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![license](https://img.shields.io/badge/license-MIT-0f172a?style=for-the-badge)](./LICENSE)
-[![providers](https://img.shields.io/badge/providers-OpenCode%20Go%20%7C%20Zen%20%7C%20Kimi%20%7C%20DeepSeek%20%7C%20OpenAI%20%7C%20OpenRouter%20%7C%20Qwen-0ea5e9?style=for-the-badge)](https://www.npmjs.com/package/claude-connect)
+[![providers](https://img.shields.io/badge/providers-OpenCode%20Go%20%7C%20Zen%20%7C%20Kimi%20%7C%20DeepSeek%20%7C%20Ollama%20%7C%20OpenAI%20%7C%20OpenRouter%20%7C%20Qwen-0ea5e9?style=for-the-badge)](https://www.npmjs.com/package/claude-connect)
 
 ## Why Claude Connect
 
@@ -13,7 +13,7 @@
 
 ### Highlights
 
-- `OpenCode Go`, `Zen`, `Kimi`, `DeepSeek`, `OpenAI`, `OpenRouter` y `Qwen` listos desde el primer arranque
+- `OpenCode Go`, `Zen`, `Kimi`, `DeepSeek`, `Ollama`, `OpenAI`, `OpenRouter` y `Qwen` listos desde el primer arranque
 - soporte para `Token` y `OAuth` cuando el proveedor lo permite
 - API keys compartidas por proveedor para no repetir el mismo token en cada modelo
 - activación reversible sobre la instalación real de `Claude Code`
@@ -78,6 +78,7 @@ Al activar:
 - `Zen` usa conexión directa o gateway según el modelo elegido
 - `Kimi` usa gateway local y reenvia al endpoint Anthropic de `https://api.kimi.com/coding/`
 - `DeepSeek` apunta a `https://api.deepseek.com/anthropic`
+- `Ollama` pide una URL local o remota, valida `/api/tags` y usa el gateway local sobre `.../api/chat`
 - `OpenAI` usa el gateway local sobre `https://api.openai.com/v1/chat/completions`
 - `OpenRouter` usa `openrouter/free` por gateway sobre `https://openrouter.ai/api/v1`
 - `Qwen` apunta al gateway local `http://127.0.0.1:4310/anthropic`
@@ -90,6 +91,7 @@ Al activar:
 | `Zen` | `Claude*` de Zen + modelos `chat/completions` de Zen | `Token` | Mixta |
 | `Kimi` | `kimi-for-coding` | `Token` | Gateway local |
 | `DeepSeek` | `deepseek-chat`, `deepseek-reasoner` | `Token` | Directa |
+| `Ollama` | modelos descubiertos desde tu servidor | `Servidor Ollama` | Gateway local |
 | `OpenAI` | `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.3-codex`, `gpt-5.2-codex`, `gpt-5.2`, `gpt-5.1-codex-max`, `gpt-5.1-codex-mini` | `Token` | Gateway local |
 | `OpenRouter` | `openrouter/free` | `Token` | Gateway local |
 | `Qwen` | `qwen3-coder-plus` | `OAuth`, `Token` | Gateway local |
@@ -115,6 +117,17 @@ Nota sobre `OpenAI`:
   - https://platform.openai.com/docs/api-reference/chat/create
   - https://platform.openai.com/docs/api-reference/authentication
   - https://developers.openai.com/api/docs/models
+
+Nota sobre `Ollama`:
+
+- la URL del servidor se define al crear la conexión
+- sirve tanto para `localhost` como para un VPS o servidor remoto con Ollama expuesto
+- Claude Connect consulta `/api/tags` para listar modelos y validar la conexión antes de guardar
+- luego usa el endpoint nativo `POST /api/chat`, que resultó más compatible para servidores remotos que publican mal `/v1/*`
+- servidores remotos pueden seguir fallando por timeout, auth cloud o respuestas pobres del modelo; la app ya distingue mejor esos casos
+- referencia oficial:
+  - https://docs.ollama.com/openai
+  - https://docs.ollama.com/api/tags
 
 ## What It Stores
 

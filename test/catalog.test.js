@@ -2,11 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createCatalogStore } from '../src/data/catalog-store.js';
 
-test('sqlite catalog seeds opencode-go, zen, kimi, deepseek, openai, openrouter and qwen providers with models and auth', () => {
+test('sqlite catalog seeds opencode-go, zen, kimi, deepseek, ollama, openai, openrouter and qwen providers with models and auth', () => {
   const store = createCatalogStore({ filename: ':memory:' });
   const providers = store.getProviders();
 
-  assert.equal(providers.length, 7);
+  assert.equal(providers.length, 8);
 
   const opencodeGo = store.getProviderCatalog('opencode-go');
   assert.ok(opencodeGo);
@@ -59,6 +59,14 @@ test('sqlite catalog seeds opencode-go, zen, kimi, deepseek, openai, openrouter 
   assert.equal(deepseek.models[1].id, 'deepseek-reasoner');
   assert.equal(deepseek.models[0].transportMode, 'direct');
   assert.equal(deepseek.oauth, null);
+
+  const ollama = store.getProviderCatalog('ollama');
+  assert.ok(ollama);
+  assert.equal(ollama.baseUrl, 'http://127.0.0.1:11434');
+  assert.equal(ollama.models.length, 0);
+  assert.equal(ollama.authMethods.length, 1);
+  assert.equal(ollama.authMethods[0].id, 'server');
+  assert.equal(ollama.oauth, null);
 
   const openai = store.getProviderCatalog('openai');
   assert.ok(openai);

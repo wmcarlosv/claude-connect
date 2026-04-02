@@ -192,6 +192,10 @@ function buildOpenAIContentPartFromAnthropicBlock(block) {
 }
 
 function safeParseJson(value) {
+  if (isObject(value)) {
+    return value;
+  }
+
   if (typeof value !== 'string' || value.length === 0) {
     return {};
   }
@@ -376,6 +380,134 @@ export function buildOpenAIRequestFromAnthropic({ body, model }) {
   return request;
 }
 
+export function buildOllamaRequestFromAnthropic({ body, model }) {
+  const messages = [];
+  const toolUseIdToName = new Map();
+  const systemText = collectText(body.system).trim();
+
+  if (systemText.length > 0) {
+    messages.push({
+      role: 'system',
+      content: systemText
+    });
+  }
+
+  for (const message of Array.isArray(body.messages) ? body.messages : []) {
+    const blocks = normalizeBlocks(message?.content);
+
+    if (message?.role === 'user') {
+      let textParts = [];
+      let imageParts = [];
+
+      const flushUserMessage = () => {
+        if (textParts.length === 0 && imageParts.length === 0) {
+          return;
+        }
+
+        messages.push({
+          role: 'user',
+          content: textParts.join('\n\n'),
+          ...(imageParts.length > 0 ? { images: imageParts } : {})
+        });
+
+        textParts = [];
+        imageParts = [];
+      };
+
+      for (const block of blocks) {
+        if (block?.type === 'tool_result') {
+          flushUserMessage();
+          messages.push({
+            role: 'tool',
+            tool_name: toolUseIdToName.get(block.tool_use_id) ?? block.tool_use_id ?? 'tool',
+            content: collectText(block.content)
+          });
+          continue;
+        }
+
+        if (block?.type === 'image' && block?.source?.type === 'base64' && typeof block?.source?.data === 'string') {
+          imageParts.push(block.source.data);
+          continue;
+        }
+
+        textParts.push(collectText(block?.text ?? block));
+      }
+
+      flushUserMessage();
+      continue;
+    }
+
+    if (message?.role === 'assistant') {
+      const textParts = [];
+      const toolCalls = [];
+
+      for (const block of blocks) {
+        if (block?.type === 'tool_use') {
+          toolUseIdToName.set(block.id, block.name);
+          toolCalls.push({
+            function: {
+              name: block.name,
+              arguments: block.input ?? {}
+            }
+          });
+          continue;
+        }
+
+        textParts.push(collectText(block?.text ?? block));
+      }
+
+      messages.push({
+        role: 'assistant',
+        content: textParts.join('\n\n'),
+        ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {})
+      });
+    }
+  }
+
+  const request = {
+    model,
+    messages,
+    stream: false
+  };
+
+  if (typeof body.max_tokens === 'number') {
+    request.options = {
+      ...(isObject(request.options) ? request.options : {}),
+      num_predict: body.max_tokens
+    };
+  }
+
+  if (typeof body.temperature === 'number') {
+    request.options = {
+      ...(isObject(request.options) ? request.options : {}),
+      temperature: body.temperature
+    };
+  }
+
+  if (Array.isArray(body.stop_sequences) && body.stop_sequences.length > 0) {
+    request.options = {
+      ...(isObject(request.options) ? request.options : {}),
+      stop: body.stop_sequences
+    };
+  }
+
+  if (Array.isArray(body.tools) && body.tools.length > 0) {
+    request.tools = body.tools.map((tool) => ({
+      type: 'function',
+      function: {
+        name: tool.name,
+        description: tool.description ?? '',
+        parameters: tool.input_schema ?? {
+          type: 'object',
+          properties: {}
+        }
+      }
+    }));
+  }
+
+  return request;
+}
+
 export function buildAnthropicMessageFromOpenAI({ response, requestedModel }) {
   const choice = response?.choices?.[0] ?? {};
   const assistantMessage = choice?.message ?? {};
@@ -417,6 +549,47 @@ export function buildAnthropicMessageFromOpenAI({ response, requestedModel }) {
     usage: {
       input_tokens: Number(response?.usage?.prompt_tokens ?? 0),
       output_tokens: Number(response?.usage?.completion_tokens ?? 0)
+    }
+  };
+}
+
+export function buildAnthropicMessageFromOllama({ response, requestedModel }) {
+  const assistantMessage = isObject(response?.message) ? response.message : {};
+  const content = [];
+  const text = typeof assistantMessage.content === 'string' ? assistantMessage.content : '';
+  const toolCalls = Array.isArray(assistantMessage.tool_calls) ? assistantMessage.tool_calls : [];
+
+  if (text.length > 0) {
+    content.push({
+      type: 'text',
+      text
+    });
+  }
+
+  for (const toolCall of toolCalls) {
+    content.push({
+      type: 'tool_use',
+      id: `toolu_${crypto.randomUUID().replace(/-/g, '')}`,
+      name: toolCall?.function?.name || 'tool',
+      input: safeParseJson(toolCall?.function?.arguments)
+    });
+  }
+
+  return {
+    id: `msg_${crypto.randomUUID().replace(/-/g, '')}`,
+    type: 'message',
+    role: 'assistant',
+    model: requestedModel || response?.model || 'unknown',
+    content,
+    stop_reason: toolCalls.length > 0
+      ? 'tool_use'
+      : response?.done_reason === 'length'
+        ? 'max_tokens'
+        : 'end_turn',
+    stop_sequence: null,
+    usage: {
+      input_tokens: Number(response?.prompt_eval_count ?? 0),
+      output_tokens: Number(response?.eval_count ?? 0)
     }
   };
 }

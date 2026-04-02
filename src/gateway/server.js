@@ -6,7 +6,9 @@ import process from 'node:process';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
+  buildAnthropicMessageFromOllama,
   buildAnthropicMessageFromOpenAI,
+  buildOllamaRequestFromAnthropic,
   buildOpenAIRequestFromAnthropic,
   estimateTokenCountFromAnthropicRequest,
   normalizeAnthropicRequestForUpstream,
@@ -31,6 +33,30 @@ const cliEntryPath = path.join(projectRoot, 'bin', 'claude-connect.js');
 
 function isObject(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function describeRequestError(error) {
+  if (!(error instanceof Error)) {
+    return String(error);
+  }
+
+  const parts = [error.message];
+  const cause = error.cause;
+
+  if (cause && typeof cause === 'object') {
+    const code = 'code' in cause && typeof cause.code === 'string' ? cause.code : null;
+    const message = 'message' in cause && typeof cause.message === 'string' ? cause.message : null;
+
+    if (code) {
+      parts.push(`code=${code}`);
+    }
+
+    if (message && message !== error.message) {
+      parts.push(message);
+    }
+  }
+
+  return parts.join(' · ');
 }
 
 async function terminatePid(pid) {
@@ -136,6 +162,18 @@ function getUpstreamModelId(profile) {
 }
 
 function resolveGatewayUpstreamConfig(profile) {
+  if (profile?.provider?.id === 'ollama') {
+    return {
+      upstreamBaseUrl: typeof profile?.endpoint?.baseUrl === 'string' && profile.endpoint.baseUrl.length > 0
+        ? profile.endpoint.baseUrl
+        : typeof profile?.model?.apiBaseUrl === 'string' && profile.model.apiBaseUrl.length > 0
+          ? profile.model.apiBaseUrl
+          : 'http://127.0.0.1:11434',
+      upstreamApiStyle: 'ollama-chat',
+      upstreamApiPath: '/api/chat'
+    };
+  }
+
   return {
     upstreamBaseUrl: typeof profile?.model?.apiBaseUrl === 'string' && profile.model.apiBaseUrl.length > 0
       ? profile.model.apiBaseUrl
@@ -168,6 +206,19 @@ async function resolveGatewayContext() {
 
   const profile = await readProfileFile(switchState.profilePath);
   const authMethod = profile?.auth?.method === 'api_key' ? 'token' : profile?.auth?.method;
+
+  if (authMethod === 'server' && profile?.provider?.id === 'ollama') {
+    const upstream = resolveGatewayUpstreamConfig(profile);
+
+    return {
+      profile,
+      authMethod,
+      upstreamBaseUrl: upstream.upstreamBaseUrl,
+      upstreamApiStyle: upstream.upstreamApiStyle,
+      upstreamApiPath: upstream.upstreamApiPath,
+      accessToken: 'ollama'
+    };
+  }
 
   if (authMethod === 'token') {
     const envVar = profile?.auth?.envVar;
@@ -236,11 +287,25 @@ async function resolveGatewayContext() {
 }
 
 async function forwardUpstreamRequest({ targetUrl, headers, payload, context, refreshOnUnauthorized = true }) {
-  const response = await fetch(targetUrl, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(payload)
-  });
+  let response;
+
+  try {
+    response = await fetch(targetUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload)
+    });
+  } catch (error) {
+    const providerName = context?.profile?.provider?.name ?? context?.profile?.provider?.id ?? 'El proveedor';
+
+    if (context?.profile?.provider?.id === 'ollama') {
+      throw new Error(
+        `${providerName} no respondio en ${targetUrl}. Revisa que el servidor remoto este accesible, que el puerto este expuesto y que Ollama escuche en esa URL. Detalle: ${describeRequestError(error)}`
+      );
+    }
+
+    throw new Error(`${providerName} no respondio en ${targetUrl}. Detalle: ${describeRequestError(error)}`);
+  }
 
   const responsePayload = await response.json().catch(() => ({}));
 
@@ -300,6 +365,22 @@ async function forwardChatCompletion({ openAiRequest, context, refreshOnUnauthor
       'user-agent': 'claude-connect-gateway/0.1.0'
     },
     payload: openAiRequest,
+    context,
+    refreshOnUnauthorized
+  });
+}
+
+async function forwardOllamaChat({ ollamaRequest, context, refreshOnUnauthorized = true }) {
+  const targetUrl = `${context.upstreamBaseUrl.replace(/\/$/, '')}${context.upstreamApiPath || '/api/chat'}`;
+
+  return forwardUpstreamRequest({
+    targetUrl,
+    headers: {
+      'content-type': 'application/json',
+      accept: 'application/json',
+      'user-agent': 'claude-connect-gateway/0.1.0'
+    },
+    payload: ollamaRequest,
     context,
     refreshOnUnauthorized
   });
@@ -381,6 +462,36 @@ async function handleMessages(request, response) {
       context
     });
     sendJson(response, 200, upstreamResponse);
+    return;
+  }
+
+  if (context.upstreamApiStyle === 'ollama-chat') {
+    const ollamaRequest = buildOllamaRequestFromAnthropic({
+      body,
+      model: getUpstreamModelId(context.profile)
+    });
+    const upstreamResponse = await forwardOllamaChat({
+      ollamaRequest,
+      context
+    });
+    const anthropicMessage = buildAnthropicMessageFromOllama({
+      response: upstreamResponse,
+      requestedModel: getUpstreamModelId(context.profile)
+    });
+
+    if (body.stream === true) {
+      response.writeHead(200, {
+        'content-type': 'text/event-stream; charset=utf-8',
+        'cache-control': 'no-cache, no-transform',
+        connection: 'keep-alive',
+        'x-accel-buffering': 'no'
+      });
+      writeAnthropicStreamFromMessage(response, anthropicMessage);
+      response.end();
+      return;
+    }
+
+    sendJson(response, 200, anthropicMessage);
     return;
   }
 
