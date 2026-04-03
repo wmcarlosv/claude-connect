@@ -173,6 +173,7 @@ Fuente oficial:
 - integracion: a traves de gateway local Anthropic-compatible hacia `chat/completions`
 - presupuesto preventivo en Claude Connect:
   - `mercury-2`: contexto `128K`, salida por defecto `8,192`, maxima `16,384`
+  - ventana local de rate limit: `400,000` input tokens por minuto
 
 Nota:
 
@@ -185,6 +186,7 @@ Fuentes oficiales:
 - https://docs.inceptionlabs.ai/get-started/get-started
 - https://docs.inceptionlabs.ai/get-started/authentication
 - https://docs.inceptionlabs.ai/get-started/models
+- https://docs.inceptionlabs.ai/get-started/rate-limits
 
 ### OpenRouter
 

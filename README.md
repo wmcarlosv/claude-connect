@@ -84,6 +84,7 @@ Al activar:
 - `OpenRouter` usa `openrouter/free` por gateway sobre `https://openrouter.ai/api/v1`
 - `Qwen` apunta al gateway local `http://127.0.0.1:4310/anthropic`
 - para algunos modelos con limites conocidos, el gateway ahora ajusta `max_tokens` y bloquea prompts sobredimensionados antes de que el upstream devuelva errores opacos
+- para `Inception Labs`, el gateway tambien respeta un presupuesto local de input tokens por minuto para reducir errores de `Rate limit reached`
 
 ## Providers
 
@@ -126,12 +127,14 @@ Nota sobre `Inception Labs`:
 - esta primera integracion expone solo `mercury-2`, que es el modelo chat-compatible oficial en `v1/chat/completions`
 - `mercury-2` se trata como modelo solo texto en Claude Connect; si envias una imagen, la app ahora corta la peticion con un mensaje claro
 - Claude Connect aplica presupuesto preventivo de contexto para `mercury-2` usando ventana `128K` y salida maxima `16,384`
+- Claude Connect tambien aplica una ventana deslizante local de `400,000` input tokens por minuto para reducir rechazos del upstream por rate limit
 - `Mercury Edit 2` no se publica todavia en Claude Connect porque usa endpoints `fim/edit` que no encajan con Claude Code en esta arquitectura
 - autenticacion soportada: `API key`
 - referencias oficiales:
   - https://docs.inceptionlabs.ai/get-started/get-started
   - https://docs.inceptionlabs.ai/get-started/authentication
   - https://docs.inceptionlabs.ai/get-started/models
+  - https://docs.inceptionlabs.ai/get-started/rate-limits
 
 Nota sobre `DeepSeek`:
 

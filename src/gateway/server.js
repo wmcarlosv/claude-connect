@@ -27,6 +27,7 @@ import { readSwitchState } from '../lib/claude-settings.js';
 import { enforceModelTokenBudget } from '../lib/model-budget.js';
 import { readOAuthToken, refreshOAuthToken } from '../lib/oauth.js';
 import { readProfileFile } from '../lib/profile.js';
+import { reserveProviderInputTokens } from '../lib/provider-rate-limit.js';
 import { readManagedProviderTokenSecret, readManagedTokenSecret } from '../lib/secrets.js';
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -508,6 +509,10 @@ async function handleMessages(request, response) {
   const body = enforceModelTokenBudget({
     body: rawBody,
     profile: context.profile
+  });
+  await reserveProviderInputTokens({
+    profile: context.profile,
+    inputTokens: estimateTokenCountFromAnthropicRequest(body)
   });
 
   if (context.upstreamApiStyle === 'anthropic') {
