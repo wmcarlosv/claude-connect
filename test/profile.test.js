@@ -23,5 +23,6 @@ test('buildProfile returns openai-compatible config', () => {
   assert.equal(profile.auth.envVar, 'DASHSCOPE_API_KEY');
   assert.equal(profile.endpoint.baseUrl, 'https://dashscope.aliyuncs.com/compatible-mode/v1');
   assert.equal(profile.integration.protocol, 'openai-compatible');
+  assert.equal(profile.model.supportsVision, true);
   store.close();
 });

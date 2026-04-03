@@ -24,6 +24,7 @@ import {
 } from './state.js';
 import { resolveClaudeConnectPaths } from '../lib/app-paths.js';
 import { readSwitchState } from '../lib/claude-settings.js';
+import { enforceModelTokenBudget } from '../lib/model-budget.js';
 import { readOAuthToken, refreshOAuthToken } from '../lib/oauth.js';
 import { readProfileFile } from '../lib/profile.js';
 import { readManagedProviderTokenSecret, readManagedTokenSecret } from '../lib/secrets.js';
@@ -159,6 +160,48 @@ function normalizeOauthResourceUrl(resourceUrl) {
 
 function getUpstreamModelId(profile) {
   return profile?.model?.upstreamModelId ?? profile?.model?.id ?? 'unknown';
+}
+
+function requestContainsImageInput(body) {
+  return Array.isArray(body?.messages)
+    && body.messages.some((messageItem) => Array.isArray(messageItem?.content)
+      && messageItem.content.some((part) => part?.type === 'image'));
+}
+
+function profileSupportsImageInput(profile) {
+  if (typeof profile?.model?.supportsVision === 'boolean') {
+    return profile.model.supportsVision;
+  }
+
+  if (profile?.provider?.id === 'inception') {
+    return false;
+  }
+
+  return true;
+}
+
+function stringifyUpstreamMessage(value) {
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (value == null) {
+    return '';
+  }
+
+  if (typeof value === 'object') {
+    if ('message' in value && typeof value.message === 'string') {
+      return value.message;
+    }
+
+    try {
+      return JSON.stringify(value);
+    } catch (_error) {
+      return String(value);
+    }
+  }
+
+  return String(value);
 }
 
 function resolveGatewayUpstreamConfig(profile) {
@@ -335,9 +378,9 @@ async function forwardUpstreamRequest({ targetUrl, headers, payload, context, re
     });
   }
 
-  const message = responsePayload?.error?.message
-    || responsePayload?.message
-    || responsePayload?.error
+  const message = stringifyUpstreamMessage(responsePayload?.error?.message)
+    || stringifyUpstreamMessage(responsePayload?.message)
+    || stringifyUpstreamMessage(responsePayload?.error)
     || `HTTP ${response.status}`;
   const providerName = context?.profile?.provider?.name ?? context?.profile?.provider?.id ?? 'El proveedor';
   const containsImageInput = Array.isArray(payload?.messages)
@@ -453,8 +496,19 @@ async function handleCountTokens(request, response) {
 }
 
 async function handleMessages(request, response) {
-  const body = await readJsonBody(request);
+  const rawBody = await readJsonBody(request);
   const context = await resolveGatewayContext();
+
+  if (requestContainsImageInput(rawBody) && !profileSupportsImageInput(context.profile)) {
+    const providerName = context.profile.provider.name;
+    const modelName = context.profile.model.name;
+    throw new Error(`${providerName} no admite imagenes con el modelo ${modelName} en esta integracion. Usa un proveedor o modelo con soporte visual.`);
+  }
+
+  const body = enforceModelTokenBudget({
+    body: rawBody,
+    profile: context.profile
+  });
 
   if (context.upstreamApiStyle === 'anthropic') {
     const upstreamResponse = await forwardAnthropicMessage({

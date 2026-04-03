@@ -19,7 +19,26 @@ export function openAppScreen() {
 }
 
 export function closeAppScreen() {
-  process.stdout.write('\x1b[?25h\x1b[?1049l');
+  process.stdout.write('\x1b[?25h\x1b[?1049l\r\n');
+}
+
+function beginKeyboardCapture() {
+  readline.emitKeypressEvents(process.stdin);
+  process.stdin.resume();
+  process.stdin.setRawMode(true);
+}
+
+function restoreKeyboardState(onKeypress) {
+  if (typeof onKeypress === 'function') {
+    process.stdin.removeListener('keypress', onKeypress);
+  }
+
+  if (process.stdin.isTTY && process.stdin.isRaw) {
+    process.stdin.setRawMode(false);
+  }
+
+  process.stdin.pause();
+  process.stdout.write('\x1b[?25h');
 }
 
 export function clearScreen() {
@@ -64,13 +83,11 @@ export function buildFrame({ eyebrow, title, subtitle, body = [], footer = [] })
 
 export function waitForAnyKey(message = 'Presiona una tecla para continuar.') {
   return new Promise((resolve, reject) => {
-    readline.emitKeypressEvents(process.stdin);
-    process.stdin.setRawMode(true);
+    beginKeyboardCapture();
     let escapePending = false;
 
     const cleanup = () => {
-      process.stdin.removeListener('keypress', onKeypress);
-      process.stdin.setRawMode(false);
+      restoreKeyboardState(onKeypress);
     };
 
     const onKeypress = (_input, key = {}) => {
@@ -124,12 +141,10 @@ export function selectFromList({
     let selectedIndex = 0;
     let escapePending = false;
 
-    readline.emitKeypressEvents(process.stdin);
-    process.stdin.setRawMode(true);
+    beginKeyboardCapture();
 
     const cleanup = () => {
-      process.stdin.removeListener('keypress', onKeypress);
-      process.stdin.setRawMode(false);
+      restoreKeyboardState(onKeypress);
     };
 
     const render = () => {
@@ -247,12 +262,10 @@ export function promptText({
     let value = '';
     let escapePending = false;
 
-    readline.emitKeypressEvents(process.stdin);
-    process.stdin.setRawMode(true);
+    beginKeyboardCapture();
 
     const cleanup = () => {
-      process.stdin.removeListener('keypress', onKeypress);
-      process.stdin.setRawMode(false);
+      restoreKeyboardState(onKeypress);
     };
 
     const render = () => {

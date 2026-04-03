@@ -110,6 +110,9 @@ Nota:
 - base URL del proveedor: `https://api.deepseek.com`
 - base URL usada por Claude Code: `https://api.deepseek.com/anthropic`
 - integración: directa sobre Claude Code
+- presupuesto preventivo en Claude Connect:
+  - `deepseek-chat`: contexto `128K`, salida por defecto `4K`, maxima `8K`
+  - `deepseek-reasoner`: contexto `128K`, salida por defecto `32K`, maxima `64K`
 
 ### Ollama
 
@@ -168,10 +171,13 @@ Fuente oficial:
 - auth: `token`
 - base URL del proveedor: `https://api.inceptionlabs.ai/v1`
 - integracion: a traves de gateway local Anthropic-compatible hacia `chat/completions`
+- presupuesto preventivo en Claude Connect:
+  - `mercury-2`: contexto `128K`, salida por defecto `8,192`, maxima `16,384`
 
 Nota:
 
 - por ahora se expone solo `mercury-2`
+- `mercury-2` se considera texto-only en Claude Connect; no se intenta reenviar imagenes a ese upstream
 - `Mercury Edit 2` no se agrega todavia porque usa endpoints `fim/edit` que no encajan con la arquitectura actual de Claude Connect
 
 Fuentes oficiales:
@@ -227,6 +233,7 @@ Si el perfil activado es:
 - `Inception Labs`: Claude usa el gateway local y reenvia a `https://api.inceptionlabs.ai/v1/chat/completions`
 - `OpenRouter`: Claude usa el gateway local y envía `openrouter/free`
 - `Qwen`: Claude usa el gateway local en `127.0.0.1:4310`
+- para `DeepSeek` e `Inception Labs`, el gateway ahora ajusta `max_tokens` y bloquea conversaciones sobredimensionadas con un error claro que sugiere `/compact` o `/clear`
 
 También existen estas opciones en el menú:
 

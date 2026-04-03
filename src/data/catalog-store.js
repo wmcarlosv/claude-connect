@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS models (
   api_base_url TEXT,
   api_path TEXT,
   auth_env_mode TEXT NOT NULL DEFAULT 'auth_token',
+  supports_vision INTEGER NOT NULL DEFAULT 1,
   sort_order INTEGER NOT NULL DEFAULT 0,
   is_default INTEGER NOT NULL DEFAULT 0
 );
@@ -703,6 +704,7 @@ const seedProviders = [
         apiBaseUrl: 'https://api.inceptionlabs.ai/v1',
         apiPath: '/chat/completions',
         authEnvMode: 'auth_token',
+        supportsVision: false,
         sortOrder: 1,
         isDefault: 1
       }
@@ -838,10 +840,10 @@ function seedCatalog(db) {
     INSERT INTO models (
       id, provider_id, name, category, context_window, summary,
       upstream_model_id,
-      transport_mode, api_style, api_base_url, api_path, auth_env_mode,
+      transport_mode, api_style, api_base_url, api_path, auth_env_mode, supports_vision,
       sort_order, is_default
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       provider_id = excluded.provider_id,
       name = excluded.name,
@@ -854,6 +856,7 @@ function seedCatalog(db) {
       api_base_url = excluded.api_base_url,
       api_path = excluded.api_path,
       auth_env_mode = excluded.auth_env_mode,
+      supports_vision = excluded.supports_vision,
       sort_order = excluded.sort_order,
       is_default = excluded.is_default
   `);
@@ -924,6 +927,7 @@ function seedCatalog(db) {
           model.apiBaseUrl ?? null,
           model.apiPath ?? null,
           model.authEnvMode ?? 'auth_token',
+          model.supportsVision === false ? 0 : 1,
           model.sortOrder,
           model.isDefault
         );
@@ -995,6 +999,10 @@ function ensureSchemaMigrations(db) {
     alterStatements.push(`ALTER TABLE models ADD COLUMN auth_env_mode TEXT NOT NULL DEFAULT 'auth_token'`);
   }
 
+  if (!modelColumns.has('supports_vision')) {
+    alterStatements.push(`ALTER TABLE models ADD COLUMN supports_vision INTEGER NOT NULL DEFAULT 1`);
+  }
+
   if (!modelColumns.has('upstream_model_id')) {
     alterStatements.push(`ALTER TABLE models ADD COLUMN upstream_model_id TEXT`);
   }
@@ -1037,6 +1045,7 @@ function mapModelRow(row) {
     apiBaseUrl: row.api_base_url,
     apiPath: row.api_path,
     authEnvMode: row.auth_env_mode,
+    supportsVision: Boolean(row.supports_vision),
     sortOrder: Number(row.sort_order),
     isDefault: Boolean(row.is_default)
   };

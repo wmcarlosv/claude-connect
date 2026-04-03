@@ -83,6 +83,7 @@ Al activar:
 - `Inception Labs` usa el gateway local sobre `https://api.inceptionlabs.ai/v1/chat/completions`
 - `OpenRouter` usa `openrouter/free` por gateway sobre `https://openrouter.ai/api/v1`
 - `Qwen` apunta al gateway local `http://127.0.0.1:4310/anthropic`
+- para algunos modelos con limites conocidos, el gateway ahora ajusta `max_tokens` y bloquea prompts sobredimensionados antes de que el upstream devuelva errores opacos
 
 ## Providers
 
@@ -123,12 +124,21 @@ Nota sobre `OpenAI`:
 Nota sobre `Inception Labs`:
 
 - esta primera integracion expone solo `mercury-2`, que es el modelo chat-compatible oficial en `v1/chat/completions`
+- `mercury-2` se trata como modelo solo texto en Claude Connect; si envias una imagen, la app ahora corta la peticion con un mensaje claro
+- Claude Connect aplica presupuesto preventivo de contexto para `mercury-2` usando ventana `128K` y salida maxima `16,384`
 - `Mercury Edit 2` no se publica todavia en Claude Connect porque usa endpoints `fim/edit` que no encajan con Claude Code en esta arquitectura
 - autenticacion soportada: `API key`
 - referencias oficiales:
   - https://docs.inceptionlabs.ai/get-started/get-started
   - https://docs.inceptionlabs.ai/get-started/authentication
   - https://docs.inceptionlabs.ai/get-started/models
+
+Nota sobre `DeepSeek`:
+
+- Claude Connect aplica presupuesto preventivo de contexto para `deepseek-chat` y `deepseek-reasoner`
+- referencias oficiales:
+  - https://api-docs.deepseek.com/quick_start/pricing/
+  - https://api-docs.deepseek.com/guides/reasoning_model
 
 Nota sobre `Ollama`:
 

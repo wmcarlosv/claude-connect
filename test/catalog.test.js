@@ -92,6 +92,7 @@ test('sqlite catalog seeds opencode-go, zen, kimi, deepseek, ollama, openai, inc
   assert.equal(inception.models[0].upstreamModelId, 'mercury-2');
   assert.equal(inception.models[0].transportMode, 'gateway');
   assert.equal(inception.models[0].apiStyle, 'openai-chat');
+  assert.equal(inception.models[0].supportsVision, false);
   assert.equal(inception.oauth, null);
 
   const openrouter = store.getProviderCatalog('openrouter');

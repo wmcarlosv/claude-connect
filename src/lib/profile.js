@@ -32,7 +32,8 @@ export function buildProfile({ provider, model, authMethod, profileName, apiKeyE
       apiStyle: model.apiStyle,
       apiBaseUrl: model.apiBaseUrl,
       apiPath: model.apiPath,
-      authEnvMode: model.authEnvMode
+      authEnvMode: model.authEnvMode,
+      supportsVision: model.supportsVision ?? true
     },
     auth: {
       method: authMethod.id
