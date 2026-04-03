@@ -1,11 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import {
   buildClaudeConnectHomeCandidates,
   buildClaudeAccountPathCandidates,
   buildClaudeCredentialsPathCandidates,
-  buildClaudeSettingsPathCandidates
+  buildClaudeSettingsPathCandidates,
+  detectClaudeCodeInstallation,
+  findExecutableOnPath
 } from '../src/lib/app-paths.js';
+import { getDefaultCatalogDbPath } from '../src/data/catalog-store.js';
 
 test('buildClaudeSettingsPathCandidates prioritizes linux defaults and overrides', () => {
   const candidates = buildClaudeSettingsPathCandidates({
@@ -71,6 +77,28 @@ test('buildClaudeConnectHomeCandidates supports windows and linux storage roots'
   ]);
 });
 
+test('getDefaultCatalogDbPath stores sqlite under the claude-connect home instead of cwd', () => {
+  const linuxDbPath = getDefaultCatalogDbPath({
+    platform: 'linux',
+    homedir: '/home/tester',
+    env: {
+      HOME: '/home/tester',
+      XDG_CONFIG_HOME: '/home/tester/.config'
+    }
+  });
+  const windowsDbPath = getDefaultCatalogDbPath({
+    platform: 'win32',
+    homedir: 'C:\\Users\\Tester',
+    env: {
+      USERPROFILE: 'C:\\Users\\Tester',
+      APPDATA: 'C:\\Users\\Tester\\AppData\\Roaming'
+    }
+  });
+
+  assert.equal(linuxDbPath, '/home/tester/.config/claude-connect/storage/claude-connect.sqlite');
+  assert.equal(windowsDbPath, 'C:\\Users\\Tester\\AppData\\Roaming\\claude-connect\\storage\\claude-connect.sqlite');
+});
+
 test('buildClaudeAccountPathCandidates resolves the Claude account snapshot path', () => {
   const linuxCandidates = buildClaudeAccountPathCandidates({
     platform: 'linux',
@@ -123,4 +151,35 @@ test('buildClaudeCredentialsPathCandidates resolves the Claude credentials path'
     'C:\\Users\\Tester\\AppData\\Roaming\\Claude\\.credentials.json',
     'C:\\Users\\Tester\\AppData\\Local\\Claude\\.credentials.json'
   ]);
+});
+
+test('findExecutableOnPath resolves claude when it exists on PATH', async () => {
+  const executablePath = await findExecutableOnPath('claude', {
+    platform: 'linux',
+    env: {
+      PATH: '/opt/bin:/usr/local/bin'
+    }
+  });
+
+  assert.equal(executablePath, null);
+});
+
+test('detectClaudeCodeInstallation reports installed when a settings file exists', async () => {
+  const tempHome = await fs.mkdtemp(path.join(os.tmpdir(), 'claude-connect-install-'));
+  const settingsPath = path.join(tempHome, '.claude', 'settings.json');
+
+  await fs.mkdir(path.dirname(settingsPath), { recursive: true });
+  await fs.writeFile(settingsPath, '{}\n');
+
+  const result = await detectClaudeCodeInstallation({
+    platform: 'linux',
+    homedir: tempHome,
+    env: {
+      HOME: tempHome,
+      PATH: ''
+    }
+  });
+
+  assert.equal(result.isInstalled, true);
+  assert.equal(result.existingSettingsPath, settingsPath);
 });

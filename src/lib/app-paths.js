@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import fsSync from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
@@ -43,6 +44,14 @@ async function pathExists(targetPath) {
   try {
     await fs.access(targetPath);
     return true;
+  } catch (_error) {
+    return false;
+  }
+}
+
+function pathExistsSync(targetPath) {
+  try {
+    return fsSync.existsSync(targetPath);
   } catch (_error) {
     return false;
   }
@@ -179,6 +188,18 @@ export async function resolveClaudeConnectHome(options = {}) {
   return candidates[0];
 }
 
+export function resolveClaudeConnectHomeSync(options = {}) {
+  const candidates = buildClaudeConnectHomeCandidates(options);
+
+  for (const candidate of candidates) {
+    if (pathExistsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return candidates[0];
+}
+
 export async function resolveClaudeSettingsPath(options = {}) {
   if (typeof options.env?.CLAUDE_SETTINGS_PATH === 'string' && options.env.CLAUDE_SETTINGS_PATH.trim().length > 0) {
     return buildClaudeSettingsPathCandidates(options)[0];
@@ -244,6 +265,8 @@ export async function resolveClaudeConnectPaths(options = {}) {
 
   return {
     claudeConnectHome,
+    storageDir: path.join(claudeConnectHome, 'storage'),
+    catalogDbPath: path.join(claudeConnectHome, 'storage', 'claude-connect.sqlite'),
     profilesDir: path.join(claudeConnectHome, 'profiles'),
     tokensDir: path.join(claudeConnectHome, 'tokens'),
     secretsDir: path.join(claudeConnectHome, 'secrets'),
@@ -267,5 +290,92 @@ export async function resolveClaudePaths(options = {}) {
     claudeCredentialsPath,
     claudeConfigDir: path.dirname(claudeSettingsPath),
     ...claudeConnectPaths
+  };
+}
+
+function buildExecutableNames(command, platform = process.platform, env = process.env) {
+  if (platform !== 'win32') {
+    return [command];
+  }
+
+  const pathext = typeof env.PATHEXT === 'string' && env.PATHEXT.length > 0
+    ? env.PATHEXT.split(';').filter(Boolean)
+    : ['.EXE', '.CMD', '.BAT', '.COM'];
+  const hasExt = path.win32.extname(command).length > 0;
+
+  if (hasExt) {
+    return [command];
+  }
+
+  return pathext.map((ext) => `${command}${ext.toLowerCase()}`);
+}
+
+export async function findExecutableOnPath(command, {
+  platform = process.platform,
+  env = process.env
+} = {}) {
+  const pathModule = getPathModule(platform);
+  const pathValue = typeof env.PATH === 'string' ? env.PATH : '';
+  const pathEntries = pathValue.split(path.delimiter).filter(Boolean);
+  const commandNames = buildExecutableNames(command, platform, env);
+
+  for (const directory of pathEntries) {
+    for (const commandName of commandNames) {
+      const candidate = pathModule.join(directory, commandName);
+
+      if (await pathExists(candidate)) {
+        return candidate;
+      }
+    }
+  }
+
+  return null;
+}
+
+export async function detectClaudeCodeInstallation(options = {}) {
+  const settingsCandidates = buildClaudeSettingsPathCandidates(options);
+  const accountCandidates = buildClaudeAccountPathCandidates(options);
+  const credentialsCandidates = buildClaudeCredentialsPathCandidates(options);
+  const executablePath = await findExecutableOnPath('claude', options);
+
+  const [existingSettingsPath, existingAccountPath, existingCredentialsPath] = await Promise.all([
+    (async () => {
+      for (const candidate of settingsCandidates) {
+        if (await pathExists(candidate)) {
+          return candidate;
+        }
+      }
+
+      return null;
+    })(),
+    (async () => {
+      for (const candidate of accountCandidates) {
+        if (await pathExists(candidate)) {
+          return candidate;
+        }
+      }
+
+      return null;
+    })(),
+    (async () => {
+      for (const candidate of credentialsCandidates) {
+        if (await pathExists(candidate)) {
+          return candidate;
+        }
+      }
+
+      return null;
+    })()
+  ]);
+
+  return {
+    isInstalled: Boolean(executablePath || existingSettingsPath || existingAccountPath || existingCredentialsPath),
+    executablePath,
+    existingSettingsPath,
+    existingAccountPath,
+    existingCredentialsPath,
+    settingsCandidates,
+    accountCandidates,
+    credentialsCandidates
   };
 }

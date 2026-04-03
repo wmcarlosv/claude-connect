@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { resolveClaudePaths } from './app-paths.js';
+import { detectClaudeCodeInstallation, resolveClaudePaths } from './app-paths.js';
 import { readManagedProviderTokenSecret, readManagedTokenSecret } from './secrets.js';
 
 function isObject(value) {
@@ -240,6 +240,14 @@ export function buildClaudeSettingsForProfile({
 }
 
 export async function activateClaudeProfile({ profile, gatewayBaseUrl = 'http://127.0.0.1:4310/anthropic' }) {
+  const installation = await detectClaudeCodeInstallation();
+
+  if (!installation.isInstalled) {
+    throw new Error(
+      'Claude Code no parece estar instalado en esta maquina. Instala o ejecuta Claude Code primero y luego vuelve a activar la conexion.'
+    );
+  }
+
   const {
     claudeSettingsPath,
     claudeAccountPath,

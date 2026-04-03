@@ -1,8 +1,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { resolveClaudeConnectHomeSync } from '../lib/app-paths.js';
 
-export const defaultCatalogDbPath = path.join(process.cwd(), 'storage', 'claude-connect.sqlite');
+export function getDefaultCatalogDbPath(options = {}) {
+  const pathModule = options.platform === 'win32' ? path.win32 : path.posix;
+  return pathModule.join(resolveClaudeConnectHomeSync(options), 'storage', 'claude-connect.sqlite');
+}
+
+export const defaultCatalogDbPath = getDefaultCatalogDbPath();
 
 const schemaSql = `
 PRAGMA foreign_keys = ON;
@@ -674,6 +680,45 @@ const seedProviders = [
     ]
   },
   {
+    id: 'inception',
+    name: 'Inception Labs',
+    vendor: 'Inception Labs',
+    description: 'Inception Platform con Mercury 2 sobre un endpoint OpenAI-compatible. Claude Code se conecta a traves del gateway local para mantener compatibilidad Anthropic y herramientas.',
+    docsUrl: 'https://docs.inceptionlabs.ai/get-started/get-started',
+    docsVerifiedAt: '2026-04-03',
+    baseUrl: 'https://api.inceptionlabs.ai/v1',
+    defaultModelId: 'mercury-2',
+    defaultAuthMethodId: 'token',
+    defaultApiKeyEnvVar: 'INCEPTION_API_KEY',
+    models: [
+      {
+        id: 'mercury-2',
+        name: 'Mercury 2',
+        category: 'OpenAI Chat Completions',
+        contextWindow: '128K',
+        summary: 'Modelo generalista y de razonamiento de Inception Labs expuesto por v1/chat/completions.',
+        upstreamModelId: 'mercury-2',
+        transportMode: 'gateway',
+        apiStyle: 'openai-chat',
+        apiBaseUrl: 'https://api.inceptionlabs.ai/v1',
+        apiPath: '/chat/completions',
+        authEnvMode: 'auth_token',
+        sortOrder: 1,
+        isDefault: 1
+      }
+    ],
+    authMethods: [
+      {
+        id: 'token',
+        name: 'Token',
+        description: 'Conexion por API key de Inception Labs.',
+        credentialKind: 'env_var',
+        sortOrder: 1,
+        isDefault: 1
+      }
+    ]
+  },
+  {
     id: 'openrouter',
     name: 'OpenRouter',
     vendor: 'OpenRouter',
@@ -1021,7 +1066,7 @@ function mapOAuthRow(row) {
   };
 }
 
-export function createCatalogStore({ filename = defaultCatalogDbPath } = {}) {
+export function createCatalogStore({ filename = getDefaultCatalogDbPath() } = {}) {
   if (filename !== ':memory:') {
     fs.mkdirSync(path.dirname(filename), { recursive: true });
   }

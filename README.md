@@ -1,11 +1,11 @@
 # Claude Connect
 
-> Conecta `Claude Code` con `OpenCode Go`, `Zen`, `Kimi`, `DeepSeek`, `Ollama`, `OpenAI`, `OpenRouter` y `Qwen` desde una interfaz de consola clara, rápida y reversible.
+> Conecta `Claude Code` con `OpenCode Go`, `Zen`, `Kimi`, `DeepSeek`, `Ollama`, `OpenAI`, `Inception Labs`, `OpenRouter` y `Qwen` desde una interfaz de consola clara, rápida y reversible.
 
 [![npm version](https://img.shields.io/npm/v/claude-connect?style=for-the-badge&logo=npm&color=cb3837)](https://www.npmjs.com/package/claude-connect)
 [![node](https://img.shields.io/badge/node-%3E%3D22-2f7d32?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![license](https://img.shields.io/badge/license-MIT-0f172a?style=for-the-badge)](./LICENSE)
-[![providers](https://img.shields.io/badge/providers-OpenCode%20Go%20%7C%20Zen%20%7C%20Kimi%20%7C%20DeepSeek%20%7C%20Ollama%20%7C%20OpenAI%20%7C%20OpenRouter%20%7C%20Qwen-0ea5e9?style=for-the-badge)](https://www.npmjs.com/package/claude-connect)
+[![providers](https://img.shields.io/badge/providers-OpenCode%20Go%20%7C%20Zen%20%7C%20Kimi%20%7C%20DeepSeek%20%7C%20Ollama%20%7C%20OpenAI%20%7C%20Inception%20Labs%20%7C%20OpenRouter%20%7C%20Qwen-0ea5e9?style=for-the-badge)](https://www.npmjs.com/package/claude-connect)
 
 ## Why Claude Connect
 
@@ -13,7 +13,7 @@
 
 ### Highlights
 
-- `OpenCode Go`, `Zen`, `Kimi`, `DeepSeek`, `Ollama`, `OpenAI`, `OpenRouter` y `Qwen` listos desde el primer arranque
+- `OpenCode Go`, `Zen`, `Kimi`, `DeepSeek`, `Ollama`, `OpenAI`, `Inception Labs`, `OpenRouter` y `Qwen` listos desde el primer arranque
 - soporte para `Token` y `OAuth` cuando el proveedor lo permite
 - API keys compartidas por proveedor para no repetir el mismo token en cada modelo
 - activación reversible sobre la instalación real de `Claude Code`
@@ -80,6 +80,7 @@ Al activar:
 - `DeepSeek` apunta a `https://api.deepseek.com/anthropic`
 - `Ollama` pide una URL local o remota, valida `/api/tags` y usa el gateway local sobre `.../api/chat`
 - `OpenAI` usa el gateway local sobre `https://api.openai.com/v1/chat/completions`
+- `Inception Labs` usa el gateway local sobre `https://api.inceptionlabs.ai/v1/chat/completions`
 - `OpenRouter` usa `openrouter/free` por gateway sobre `https://openrouter.ai/api/v1`
 - `Qwen` apunta al gateway local `http://127.0.0.1:4310/anthropic`
 
@@ -93,6 +94,7 @@ Al activar:
 | `DeepSeek` | `deepseek-chat`, `deepseek-reasoner` | `Token` | Directa |
 | `Ollama` | modelos descubiertos desde tu servidor | `Servidor Ollama` | Gateway local |
 | `OpenAI` | `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.3-codex`, `gpt-5.2-codex`, `gpt-5.2`, `gpt-5.1-codex-max`, `gpt-5.1-codex-mini` | `Token` | Gateway local |
+| `Inception Labs` | `mercury-2` | `Token` | Gateway local |
 | `OpenRouter` | `openrouter/free` | `Token` | Gateway local |
 | `Qwen` | `qwen3-coder-plus` | `OAuth`, `Token` | Gateway local |
 
@@ -117,6 +119,16 @@ Nota sobre `OpenAI`:
   - https://platform.openai.com/docs/api-reference/chat/create
   - https://platform.openai.com/docs/api-reference/authentication
   - https://developers.openai.com/api/docs/models
+
+Nota sobre `Inception Labs`:
+
+- esta primera integracion expone solo `mercury-2`, que es el modelo chat-compatible oficial en `v1/chat/completions`
+- `Mercury Edit 2` no se publica todavia en Claude Connect porque usa endpoints `fim/edit` que no encajan con Claude Code en esta arquitectura
+- autenticacion soportada: `API key`
+- referencias oficiales:
+  - https://docs.inceptionlabs.ai/get-started/get-started
+  - https://docs.inceptionlabs.ai/get-started/authentication
+  - https://docs.inceptionlabs.ai/get-started/models
 
 Nota sobre `Ollama`:
 
@@ -151,14 +163,16 @@ Ahí viven:
 El catálogo SQLite local se genera automáticamente en:
 
 ```text
-storage/claude-connect.sqlite
+Linux: ~/.claude-connect/storage/claude-connect.sqlite
+Windows: %APPDATA%\claude-connect\storage\claude-connect.sqlite
 ```
 
 Importante:
 
 - esa base ya no se versiona en git
 - el catálogo se siembra desde `src/data/catalog-store.js`
-- esto evita conflictos molestos al hacer `git pull`
+- ya no se crea en la carpeta donde ejecutas el comando
+- esto evita conflictos molestos al hacer `git pull` y carpetas `storage/` accidentales en proyectos ajenos
 
 ## Claude Code Switching
 
@@ -175,6 +189,7 @@ Eso permite:
 - activar otro proveedor sin tocar archivos manualmente
 - evitar el `Auth conflict` entre sesión `claude.ai` y `API key`
 - volver a tu estado original con `Revertir Claude`
+- bloquear la activación si `Claude Code` no está realmente instalado todavía
 
 ## Qwen OAuth
 

@@ -52,6 +52,71 @@ test('buildClaudeSettingsForProfile preserves base settings and injects switch e
   store.close();
 });
 
+test('activateClaudeProfile fails when Claude Code is not installed', async () => {
+  const tempHome = await fs.mkdtemp(path.join(os.tmpdir(), 'claude-connect-no-claude-'));
+  const previousEnv = {
+    HOME: process.env.HOME,
+    PATH: process.env.PATH,
+    CLAUDE_SETTINGS_PATH: process.env.CLAUDE_SETTINGS_PATH,
+    CLAUDE_ACCOUNT_PATH: process.env.CLAUDE_ACCOUNT_PATH,
+    CLAUDE_CREDENTIALS_PATH: process.env.CLAUDE_CREDENTIALS_PATH
+  };
+  const store = createCatalogStore({ filename: ':memory:' });
+  const provider = store.getProviderCatalog('openai');
+  const profile = buildProfile({
+    provider,
+    model: provider.models[0],
+    authMethod: provider.authMethods[0],
+    profileName: 'openai-gpt-5-4-token',
+    apiKeyEnvVar: 'OPENAI_API_KEY'
+  });
+
+  process.env.HOME = tempHome;
+  process.env.PATH = '';
+  delete process.env.CLAUDE_SETTINGS_PATH;
+  delete process.env.CLAUDE_ACCOUNT_PATH;
+  delete process.env.CLAUDE_CREDENTIALS_PATH;
+
+  try {
+    await assert.rejects(
+      activateClaudeProfile({ profile }),
+      /Claude Code no parece estar instalado/
+    );
+  } finally {
+    if (typeof previousEnv.HOME === 'string') {
+      process.env.HOME = previousEnv.HOME;
+    } else {
+      delete process.env.HOME;
+    }
+
+    if (typeof previousEnv.PATH === 'string') {
+      process.env.PATH = previousEnv.PATH;
+    } else {
+      delete process.env.PATH;
+    }
+
+    if (typeof previousEnv.CLAUDE_SETTINGS_PATH === 'string') {
+      process.env.CLAUDE_SETTINGS_PATH = previousEnv.CLAUDE_SETTINGS_PATH;
+    } else {
+      delete process.env.CLAUDE_SETTINGS_PATH;
+    }
+
+    if (typeof previousEnv.CLAUDE_ACCOUNT_PATH === 'string') {
+      process.env.CLAUDE_ACCOUNT_PATH = previousEnv.CLAUDE_ACCOUNT_PATH;
+    } else {
+      delete process.env.CLAUDE_ACCOUNT_PATH;
+    }
+
+    if (typeof previousEnv.CLAUDE_CREDENTIALS_PATH === 'string') {
+      process.env.CLAUDE_CREDENTIALS_PATH = previousEnv.CLAUDE_CREDENTIALS_PATH;
+    } else {
+      delete process.env.CLAUDE_CREDENTIALS_PATH;
+    }
+  }
+
+  store.close();
+});
+
 test('buildClaudeSettingsForProfile supports deepseek direct anthropic mode', () => {
   const store = createCatalogStore({ filename: ':memory:' });
   const provider = store.getProviderCatalog('deepseek');
@@ -222,6 +287,26 @@ test('resolveClaudeTransportForProfile supports openai gateway models', async ()
     authMethod: provider.authMethods[0],
     profileName: 'openai-gpt-5-4-token',
     apiKeyEnvVar: 'OPENAI_API_KEY'
+  });
+  const transport = await resolveClaudeTransportForProfile({ profile });
+
+  assert.equal(transport.connectionMode, 'gateway');
+  assert.equal(transport.connectionBaseUrl, 'http://127.0.0.1:4310/anthropic');
+  assert.equal(transport.authEnvMode, 'auth_token');
+  assert.equal(transport.authToken, 'claude-connect-local');
+
+  store.close();
+});
+
+test('resolveClaudeTransportForProfile supports inception gateway models', async () => {
+  const store = createCatalogStore({ filename: ':memory:' });
+  const provider = store.getProviderCatalog('inception');
+  const profile = buildProfile({
+    provider,
+    model: provider.models.find((model) => model.id === 'mercury-2'),
+    authMethod: provider.authMethods[0],
+    profileName: 'inception-mercury-2-token',
+    apiKeyEnvVar: 'INCEPTION_API_KEY'
   });
   const transport = await resolveClaudeTransportForProfile({ profile });
 

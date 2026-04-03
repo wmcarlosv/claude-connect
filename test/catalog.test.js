@@ -2,11 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createCatalogStore } from '../src/data/catalog-store.js';
 
-test('sqlite catalog seeds opencode-go, zen, kimi, deepseek, ollama, openai, openrouter and qwen providers with models and auth', () => {
+test('sqlite catalog seeds opencode-go, zen, kimi, deepseek, ollama, openai, inception, openrouter and qwen providers with models and auth', () => {
   const store = createCatalogStore({ filename: ':memory:' });
   const providers = store.getProviders();
 
-  assert.equal(providers.length, 8);
+  assert.equal(providers.length, 9);
 
   const opencodeGo = store.getProviderCatalog('opencode-go');
   assert.ok(opencodeGo);
@@ -81,6 +81,18 @@ test('sqlite catalog seeds opencode-go, zen, kimi, deepseek, ollama, openai, ope
   assert.equal(openai.models[2].id, 'gpt-5.3-codex');
   assert.equal(openai.models[6].id, 'gpt-5.1-codex-mini');
   assert.equal(openai.oauth, null);
+
+  const inception = store.getProviderCatalog('inception');
+  assert.ok(inception);
+  assert.equal(inception.baseUrl, 'https://api.inceptionlabs.ai/v1');
+  assert.equal(inception.models.length, 1);
+  assert.equal(inception.authMethods.length, 1);
+  assert.equal(inception.authMethods[0].id, 'token');
+  assert.equal(inception.models[0].id, 'mercury-2');
+  assert.equal(inception.models[0].upstreamModelId, 'mercury-2');
+  assert.equal(inception.models[0].transportMode, 'gateway');
+  assert.equal(inception.models[0].apiStyle, 'openai-chat');
+  assert.equal(inception.oauth, null);
 
   const openrouter = store.getProviderCatalog('openrouter');
   assert.ok(openrouter);

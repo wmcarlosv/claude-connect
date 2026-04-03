@@ -433,7 +433,22 @@ async function activateClaudeFromSavedProfile() {
     return profile;
   }
 
-  const result = await activateClaudeProfile({ profile });
+  let result;
+
+  try {
+    result = await activateClaudeProfile({ profile });
+  } catch (error) {
+    renderInfoScreen({
+      title: 'No se pudo activar Claude',
+      subtitle: 'Claude Connect no pudo aplicar la conexion en Claude Code.',
+      lines: [
+        colorize(error instanceof Error ? error.message : String(error), colors.warning)
+      ],
+      footer: 'Presiona una tecla para volver'
+    });
+    return await waitForAnyKey();
+  }
+
   const gateway = result.connectionMode === 'gateway'
     ? await restartGatewayInBackground()
     : await stopGateway();

@@ -16,6 +16,7 @@ La app hoy ya soporta:
 - proveedor `DeepSeek`
 - proveedor `Ollama`
 - proveedor `OpenAI`
+- proveedor `Inception Labs`
 - proveedor `OpenRouter`
 - proveedor `Qwen`
 - autenticación por `Token`
@@ -159,6 +160,26 @@ Fuente oficial:
 - https://platform.openai.com/docs/api-reference/authentication
 - https://developers.openai.com/api/docs/models
 
+### Inception Labs
+
+- provider id: `inception`
+- modelo:
+  - `mercury-2`
+- auth: `token`
+- base URL del proveedor: `https://api.inceptionlabs.ai/v1`
+- integracion: a traves de gateway local Anthropic-compatible hacia `chat/completions`
+
+Nota:
+
+- por ahora se expone solo `mercury-2`
+- `Mercury Edit 2` no se agrega todavia porque usa endpoints `fim/edit` que no encajan con la arquitectura actual de Claude Connect
+
+Fuentes oficiales:
+
+- https://docs.inceptionlabs.ai/get-started/get-started
+- https://docs.inceptionlabs.ai/get-started/authentication
+- https://docs.inceptionlabs.ai/get-started/models
+
 ### OpenRouter
 
 - provider id: `openrouter`
@@ -203,6 +224,7 @@ Si el perfil activado es:
 - `DeepSeek`: Claude usa endpoint directo Anthropic-compatible de DeepSeek
 - `Ollama`: Claude usa el gateway local y reenvia a la URL del servidor configurado en `/api/chat`
 - `OpenAI`: Claude usa el gateway local y reenvia a `https://api.openai.com/v1/chat/completions`
+- `Inception Labs`: Claude usa el gateway local y reenvia a `https://api.inceptionlabs.ai/v1/chat/completions`
 - `OpenRouter`: Claude usa el gateway local y envía `openrouter/free`
 - `Qwen`: Claude usa el gateway local en `127.0.0.1:4310`
 
@@ -224,7 +246,10 @@ Archivo principal:
 Detalles:
 
 - el catálogo se siembra desde código
-- la base local se genera automáticamente en `storage/claude-connect.sqlite`
+- la base local se genera automáticamente dentro del home de Claude Connect, no en el `cwd`
+- rutas por defecto:
+  - Linux: `~/.claude-connect/storage/claude-connect.sqlite`
+  - Windows: `%APPDATA%\\claude-connect\\storage\\claude-connect.sqlite`
 - la base SQLite ya no se versiona en git
 - esto evita conflictos de `git pull` por cambios locales del catálogo
 - la tabla `models` ya guarda metadatos de transporte por modelo
@@ -305,6 +330,7 @@ Archivo principal:
 La app hoy:
 
 - detecta automáticamente la instalación real de Claude
+- bloquea la activación si no encuentra una instalación real de `Claude Code`
 - escribe la configuración activa del proveedor elegido
 - guarda snapshots del estado original
 - limpia de forma reversible credenciales de `claude.ai` cuando hace falta
