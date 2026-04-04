@@ -529,6 +529,75 @@ const seedProviders = [
     ]
   },
   {
+    id: 'zai',
+    name: 'Z.AI',
+    vendor: 'Zhipu AI',
+    description: 'GLM Coding Plan para Claude Code usando el endpoint Anthropic-compatible oficial de z.ai.',
+    docsUrl: 'https://docs.z.ai/devpack/tool/claude',
+    docsVerifiedAt: '2026-04-04',
+    baseUrl: 'https://api.z.ai/api/anthropic',
+    defaultModelId: 'glm-5.1',
+    defaultAuthMethodId: 'token',
+    defaultApiKeyEnvVar: 'ZAI_API_KEY',
+    models: [
+      {
+        id: 'glm-5.1',
+        name: 'GLM-5.1',
+        category: 'Coding',
+        contextWindow: 'Auto',
+        summary: 'Modelo recomendado de la documentacion oficial de z.ai para usuarios Max que quieren usar GLM-5.1 en Claude Code.',
+        upstreamModelId: 'glm-5.1',
+        transportMode: 'direct',
+        apiStyle: 'anthropic',
+        apiBaseUrl: 'https://api.z.ai/api/anthropic',
+        apiPath: '/v1/messages',
+        authEnvMode: 'auth_token',
+        sortOrder: 1,
+        isDefault: 1
+      },
+      {
+        id: 'glm-4.7',
+        name: 'GLM-4.7',
+        category: 'General',
+        contextWindow: 'Auto',
+        summary: 'Modelo default recomendado por z.ai para Opus y Sonnet dentro del GLM Coding Plan.',
+        upstreamModelId: 'glm-4.7',
+        transportMode: 'direct',
+        apiStyle: 'anthropic',
+        apiBaseUrl: 'https://api.z.ai/api/anthropic',
+        apiPath: '/v1/messages',
+        authEnvMode: 'auth_token',
+        sortOrder: 2,
+        isDefault: 0
+      },
+      {
+        id: 'glm-4.5-air',
+        name: 'GLM-4.5-Air',
+        category: 'Fast',
+        contextWindow: 'Auto',
+        summary: 'Modelo ligero recomendado por z.ai para la clase Haiku dentro del GLM Coding Plan.',
+        upstreamModelId: 'glm-4.5-air',
+        transportMode: 'direct',
+        apiStyle: 'anthropic',
+        apiBaseUrl: 'https://api.z.ai/api/anthropic',
+        apiPath: '/v1/messages',
+        authEnvMode: 'auth_token',
+        sortOrder: 3,
+        isDefault: 0
+      }
+    ],
+    authMethods: [
+      {
+        id: 'token',
+        name: 'Token',
+        description: 'Conexion por API key contra el endpoint Anthropic-compatible oficial de z.ai.',
+        credentialKind: 'env_var',
+        sortOrder: 1,
+        isDefault: 1
+      }
+    ]
+  },
+  {
     id: 'ollama',
     name: 'Ollama',
     vendor: 'Ollama',

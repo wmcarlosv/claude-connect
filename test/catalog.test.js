@@ -2,11 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createCatalogStore } from '../src/data/catalog-store.js';
 
-test('sqlite catalog seeds opencode-go, zen, kimi, deepseek, ollama, openai, inception, openrouter and qwen providers with models and auth', () => {
+test('sqlite catalog seeds opencode-go, zen, kimi, deepseek, zai, ollama, openai, inception, openrouter and qwen providers with models and auth', () => {
   const store = createCatalogStore({ filename: ':memory:' });
   const providers = store.getProviders();
 
-  assert.equal(providers.length, 9);
+  assert.equal(providers.length, 10);
 
   const opencodeGo = store.getProviderCatalog('opencode-go');
   assert.ok(opencodeGo);
@@ -59,6 +59,17 @@ test('sqlite catalog seeds opencode-go, zen, kimi, deepseek, ollama, openai, inc
   assert.equal(deepseek.models[1].id, 'deepseek-reasoner');
   assert.equal(deepseek.models[0].transportMode, 'direct');
   assert.equal(deepseek.oauth, null);
+
+  const zai = store.getProviderCatalog('zai');
+  assert.ok(zai);
+  assert.equal(zai.baseUrl, 'https://api.z.ai/api/anthropic');
+  assert.equal(zai.models.length, 3);
+  assert.equal(zai.authMethods.length, 1);
+  assert.equal(zai.authMethods[0].id, 'token');
+  assert.equal(zai.models[0].id, 'glm-5.1');
+  assert.equal(zai.models[0].transportMode, 'direct');
+  assert.equal(zai.models[0].apiStyle, 'anthropic');
+  assert.equal(zai.oauth, null);
 
   const ollama = store.getProviderCatalog('ollama');
   assert.ok(ollama);

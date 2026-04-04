@@ -154,6 +154,13 @@ export async function resolveClaudeTransportForProfile({
       extraEnv.ANTHROPIC_DEFAULT_HAIKU_MODEL = profile.model.id;
     }
 
+    if (profile.provider.id === 'zai') {
+      extraEnv.API_TIMEOUT_MS = '3000000';
+      extraEnv.ANTHROPIC_DEFAULT_HAIKU_MODEL = profile.model.id;
+      extraEnv.ANTHROPIC_DEFAULT_SONNET_MODEL = profile.model.id;
+      extraEnv.ANTHROPIC_DEFAULT_OPUS_MODEL = profile.model.id;
+    }
+
     if (profile.provider.id === 'kimi') {
       extraEnv.ENABLE_TOOL_SEARCH = 'false';
     }
@@ -220,6 +227,8 @@ export function buildClaudeSettingsForProfile({
   delete env.ENABLE_TOOL_SEARCH;
   delete env.ANTHROPIC_MODEL;
   delete env.ANTHROPIC_DEFAULT_HAIKU_MODEL;
+  delete env.ANTHROPIC_DEFAULT_SONNET_MODEL;
+  delete env.ANTHROPIC_DEFAULT_OPUS_MODEL;
 
   Object.assign(env, extraEnv);
 

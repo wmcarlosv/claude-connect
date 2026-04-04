@@ -14,6 +14,7 @@ La app hoy ya soporta:
 - proveedor `Zen`
 - proveedor `Kimi`
 - proveedor `DeepSeek`
+- proveedor `Z.AI`
 - proveedor `Ollama`
 - proveedor `OpenAI`
 - proveedor `Inception Labs`
@@ -113,6 +114,27 @@ Nota:
 - presupuesto preventivo en Claude Connect:
   - `deepseek-chat`: contexto `128K`, salida por defecto `4K`, maxima `8K`
   - `deepseek-reasoner`: contexto `128K`, salida por defecto `32K`, maxima `64K`
+
+### Z.AI
+
+- provider id: `zai`
+- modelos:
+  - `glm-5.1`
+  - `glm-4.7`
+  - `glm-4.5-air`
+- auth: `token`
+- base URL del proveedor: `https://api.z.ai/api/anthropic`
+- integración: directa sobre Claude Code
+
+Comportamiento:
+
+- Claude Connect inyecta `ANTHROPIC_AUTH_TOKEN`
+- Claude Connect fija `API_TIMEOUT_MS=3000000`
+- al activar, también mapea `ANTHROPIC_DEFAULT_HAIKU_MODEL`, `ANTHROPIC_DEFAULT_SONNET_MODEL` y `ANTHROPIC_DEFAULT_OPUS_MODEL` al modelo elegido
+
+Fuente oficial:
+
+- https://docs.z.ai/devpack/tool/claude
 
 ### Ollama
 
@@ -230,6 +252,7 @@ Si el perfil activado es:
 - `Zen` con modelo `chat/completions`: Claude usa el gateway local
 - `Kimi`: Claude usa el gateway local y reenvia al endpoint Anthropic de Kimi
 - `DeepSeek`: Claude usa endpoint directo Anthropic-compatible de DeepSeek
+- `Z.AI`: Claude usa endpoint directo Anthropic-compatible de z.ai
 - `Ollama`: Claude usa el gateway local y reenvia a la URL del servidor configurado en `/api/chat`
 - `OpenAI`: Claude usa el gateway local y reenvia a `https://api.openai.com/v1/chat/completions`
 - `Inception Labs`: Claude usa el gateway local y reenvia a `https://api.inceptionlabs.ai/v1/chat/completions`

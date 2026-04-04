@@ -154,6 +154,44 @@ test('buildClaudeSettingsForProfile supports deepseek direct anthropic mode', ()
   store.close();
 });
 
+test('buildClaudeSettingsForProfile supports zai direct anthropic mode', () => {
+  const store = createCatalogStore({ filename: ':memory:' });
+  const provider = store.getProviderCatalog('zai');
+  const profile = buildProfile({
+    provider,
+    model: provider.models[0],
+    authMethod: provider.authMethods[0],
+    profileName: 'zai-glm-5-1-token',
+    apiKeyEnvVar: 'ZAI_API_KEY'
+  });
+
+  const next = buildClaudeSettingsForProfile({
+    baseSettings: {
+      env: {}
+    },
+    profile,
+    connectionBaseUrl: 'https://api.z.ai/api/anthropic',
+    authToken: 'zai-secret',
+    connectionMode: 'direct',
+    extraEnv: {
+      API_TIMEOUT_MS: '3000000',
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: 'glm-5.1',
+      ANTHROPIC_DEFAULT_SONNET_MODEL: 'glm-5.1',
+      ANTHROPIC_DEFAULT_OPUS_MODEL: 'glm-5.1'
+    }
+  });
+
+  assert.equal(next.model, 'glm-5.1');
+  assert.equal(next.env.ANTHROPIC_BASE_URL, 'https://api.z.ai/api/anthropic');
+  assert.equal(next.env.ANTHROPIC_AUTH_TOKEN, 'zai-secret');
+  assert.equal(next.env.API_TIMEOUT_MS, '3000000');
+  assert.equal(next.env.ANTHROPIC_DEFAULT_HAIKU_MODEL, 'glm-5.1');
+  assert.equal(next.env.ANTHROPIC_DEFAULT_SONNET_MODEL, 'glm-5.1');
+  assert.equal(next.env.ANTHROPIC_DEFAULT_OPUS_MODEL, 'glm-5.1');
+
+  store.close();
+});
+
 test('detectExternalClaudeEnvConflicts finds shell variables that can override Claude activation', () => {
   const conflicts = detectExternalClaudeEnvConflicts({
     ANTHROPIC_BASE_URL: 'https://api.deepseek.com/anthropic',
@@ -296,6 +334,41 @@ test('resolveClaudeTransportForProfile supports openai gateway models', async ()
   assert.equal(transport.authToken, 'claude-connect-local');
 
   store.close();
+});
+
+test('resolveClaudeTransportForProfile supports zai direct anthropic models', async () => {
+  const store = createCatalogStore({ filename: ':memory:' });
+  const provider = store.getProviderCatalog('zai');
+  const profile = buildProfile({
+    provider,
+    model: provider.models.find((model) => model.id === 'glm-5.1'),
+    authMethod: provider.authMethods[0],
+    profileName: 'zai-glm-5-1-token',
+    apiKeyEnvVar: 'ZAI_API_KEY'
+  });
+  const previous = process.env.ZAI_API_KEY;
+  process.env.ZAI_API_KEY = 'zai-secret';
+
+  try {
+    const transport = await resolveClaudeTransportForProfile({ profile });
+
+    assert.equal(transport.connectionMode, 'direct');
+    assert.equal(transport.connectionBaseUrl, 'https://api.z.ai/api/anthropic');
+    assert.equal(transport.authEnvMode, 'auth_token');
+    assert.equal(transport.authToken, 'zai-secret');
+    assert.equal(transport.extraEnv.API_TIMEOUT_MS, '3000000');
+    assert.equal(transport.extraEnv.ANTHROPIC_DEFAULT_HAIKU_MODEL, 'glm-5.1');
+    assert.equal(transport.extraEnv.ANTHROPIC_DEFAULT_SONNET_MODEL, 'glm-5.1');
+    assert.equal(transport.extraEnv.ANTHROPIC_DEFAULT_OPUS_MODEL, 'glm-5.1');
+  } finally {
+    if (typeof previous === 'string') {
+      process.env.ZAI_API_KEY = previous;
+    } else {
+      delete process.env.ZAI_API_KEY;
+    }
+
+    store.close();
+  }
 });
 
 test('resolveClaudeTransportForProfile supports inception gateway models', async () => {
