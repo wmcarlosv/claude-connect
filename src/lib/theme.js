@@ -17,8 +17,31 @@ export const colors = {
   bold: '\x1b[1m'
 };
 
+export function rgb(r, g, b) {
+  return `\x1b[38;2;${r};${g};${b}m`;
+}
+
 export function colorize(text, ...tokens) {
   return `${tokens.join('')}${text}${RESET}`;
+}
+
+export function gradientizeLines(lines, palette) {
+  if (!Array.isArray(lines) || lines.length === 0) {
+    return [];
+  }
+
+  if (!Array.isArray(palette) || palette.length === 0) {
+    return [...lines];
+  }
+
+  if (palette.length === 1) {
+    return lines.map((line) => colorize(line, palette[0], colors.bold));
+  }
+
+  return lines.map((line, index) => {
+    const paletteIndex = Math.round((index / Math.max(1, lines.length - 1)) * (palette.length - 1));
+    return colorize(line, palette[paletteIndex], colors.bold);
+  });
 }
 
 export function stripAnsi(value) {

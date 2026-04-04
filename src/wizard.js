@@ -34,7 +34,26 @@ import {
   selectFromList,
   waitForAnyKey
 } from './lib/terminal.js';
-import { colorize, colors } from './lib/theme.js';
+import { colorize, colors, gradientizeLines, rgb } from './lib/theme.js';
+
+function buildBrandWordmark() {
+  const wordmark = [
+    '  ██████╗██╗      █████╗ ██╗   ██╗██████╗ ███████╗',
+    '  ██╔════╝██║     ██╔══██╗██║   ██║██╔══██╗██╔════╝',
+    '  ██║     ██║     ███████║██║   ██║██║  ██║█████╗  ',
+    '  ██║     ██║     ██╔══██║██║   ██║██║  ██║██╔══╝  ',
+    '  ╚██████╗███████╗██║  ██║╚██████╔╝██████╔╝███████╗',
+    '   ╚═════╝╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚══════╝',
+    '                 C L A U D E   ·   C O N N E C T'
+  ];
+
+  return gradientizeLines(wordmark, [
+    rgb(103, 232, 249),
+    rgb(56, 189, 248),
+    rgb(59, 130, 246),
+    rgb(14, 165, 233)
+  ]);
+}
 
 function isBack(value) {
   return value === navigation.BACK;
@@ -229,6 +248,8 @@ function renderWelcome() {
       title: 'Conecta Claude Code con otros modelos',
       subtitle: 'Flujo guiado, catalogo SQLite y perfiles locales listos para reutilizar.',
       body: [
+        ...buildBrandWordmark(),
+        '',
         colorize('Experiencia inicial', colors.bold, colors.accentSoft),
         colorize('1. Elegir proveedor desde la base local', colors.soft),
         colorize('2. Elegir modelo y tipo de conexion', colors.soft),
@@ -236,7 +257,7 @@ function renderWelcome() {
         colorize('4. Guardar perfil y credenciales locales', colors.soft),
         '',
         colorize('Catalogo actual', colors.bold, colors.accentSoft),
-        colorize('OpenCode Go, Zen, Kimi, DeepSeek, Ollama, OpenAI, OpenRouter y Qwen ya vienen almacenados en SQLite.', colors.soft),
+        colorize('OpenCode Go, Zen, Kimi, DeepSeek, Z.AI, Ollama, OpenAI, Inception Labs, OpenRouter y Qwen ya vienen almacenados en SQLite.', colors.soft),
         '',
         colorize('Seguridad', colors.bold, colors.accentSoft),
         colorize('El token OAuth se guarda localmente y el modo Token puede guardarse una sola vez por proveedor.', colors.soft)
