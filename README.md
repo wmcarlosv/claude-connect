@@ -7,6 +7,10 @@
 [![license](https://img.shields.io/badge/license-MIT-0f172a?style=for-the-badge)](./LICENSE)
 [![providers](https://img.shields.io/badge/providers-OpenCode%20Go%20%7C%20Zen%20%7C%20Kimi%20%7C%20DeepSeek%20%7C%20Z.AI%20%7C%20Ollama%20%7C%20OpenAI%20%7C%20Inception%20Labs%20%7C%20OpenRouter%20%7C%20Qwen-0ea5e9?style=for-the-badge)](https://www.npmjs.com/package/claude-connect)
 
+<p align="center">
+  <img src="./ezgif-871b2bc9267494c5.gif" alt="Claude Connect demo" width="980" />
+</p>
+
 ## Why Claude Connect
 
 `Claude Connect` te permite cambiar `Claude Code` hacia otros proveedores sin editar archivos a mano, sin perder tu configuración original y sin convertir tu terminal en un caos de variables de entorno.
