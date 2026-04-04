@@ -546,3 +546,104 @@ test('activateClaudeProfile snapshots and restores the Claude oauth session', as
 
   store.close();
 });
+
+test('activateClaudeProfile refreshes stale inactive snapshots with the current Claude state', async (t) => {
+  const tempHome = await fs.mkdtemp(path.join(os.tmpdir(), 'claude-connect-stale-snapshot-'));
+  const settingsPath = path.join(tempHome, '.claude', 'settings.json');
+  const accountPath = path.join(tempHome, '.claude.json');
+  const credentialsPath = path.join(tempHome, '.claude', '.credentials.json');
+  const connectHome = path.join(tempHome, '.claude-connect');
+  const statePath = path.join(connectHome, 'claude-code', 'switch-state.json');
+  const previous = {
+    CLAUDE_SETTINGS_PATH: process.env.CLAUDE_SETTINGS_PATH,
+    CLAUDE_ACCOUNT_PATH: process.env.CLAUDE_ACCOUNT_PATH,
+    CLAUDE_CREDENTIALS_PATH: process.env.CLAUDE_CREDENTIALS_PATH,
+    CLAUDE_CONNECT_HOME: process.env.CLAUDE_CONNECT_HOME,
+    KIMI_API_KEY: process.env.KIMI_API_KEY
+  };
+
+  process.env.CLAUDE_SETTINGS_PATH = settingsPath;
+  process.env.CLAUDE_ACCOUNT_PATH = accountPath;
+  process.env.CLAUDE_CREDENTIALS_PATH = credentialsPath;
+  process.env.CLAUDE_CONNECT_HOME = connectHome;
+  process.env.KIMI_API_KEY = 'kimi-secret';
+
+  t.after(async () => {
+    for (const [key, value] of Object.entries(previous)) {
+      if (typeof value === 'string') {
+        process.env[key] = value;
+      } else {
+        delete process.env[key];
+      }
+    }
+
+    await fs.rm(tempHome, { recursive: true, force: true });
+  });
+
+  await fs.mkdir(path.dirname(settingsPath), { recursive: true });
+  await fs.mkdir(path.dirname(statePath), { recursive: true });
+  await fs.writeFile(settingsPath, JSON.stringify({
+    model: 'claude-opus-4-6[1m]',
+    env: {}
+  }, null, 2));
+  await fs.writeFile(accountPath, JSON.stringify({
+    oauthAccount: {
+      emailAddress: 'max@example.com',
+      subscriptionType: 'max'
+    }
+  }, null, 2));
+  await fs.writeFile(credentialsPath, JSON.stringify({
+    claudeAiOauth: {
+      accessToken: 'max-token',
+      refreshToken: 'max-refresh'
+    }
+  }, null, 2));
+  await fs.writeFile(statePath, JSON.stringify({
+    schemaVersion: 1,
+    active: false,
+    originalSettings: {
+      model: 'opus[1m]',
+      env: {
+        ANTHROPIC_BASE_URL: 'https://api.z.ai/api/anthropic'
+      }
+    },
+    originalAccount: {
+      customApiKeyResponses: {
+        approved: []
+      }
+    },
+    originalCredentials: null
+  }, null, 2));
+
+  const store = createCatalogStore({ filename: ':memory:' });
+  const provider = store.getProviderCatalog('kimi');
+  const profile = buildProfile({
+    provider,
+    model: provider.models[0],
+    authMethod: provider.authMethods[0],
+    profileName: 'kimi-for-coding-token',
+    apiKeyEnvVar: 'KIMI_API_KEY'
+  });
+
+  await activateClaudeProfile({ profile });
+  const state = JSON.parse(await fs.readFile(statePath, 'utf8'));
+
+  assert.deepEqual(state.originalSettings, {
+    model: 'claude-opus-4-6[1m]',
+    env: {}
+  });
+  assert.deepEqual(state.originalAccount, {
+    oauthAccount: {
+      emailAddress: 'max@example.com',
+      subscriptionType: 'max'
+    }
+  });
+  assert.deepEqual(state.originalCredentials, {
+    claudeAiOauth: {
+      accessToken: 'max-token',
+      refreshToken: 'max-refresh'
+    }
+  });
+
+  store.close();
+});

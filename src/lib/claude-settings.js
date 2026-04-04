@@ -259,9 +259,16 @@ export async function activateClaudeProfile({ profile, gatewayBaseUrl = 'http://
   const currentAccount = await readClaudeAccount();
   const currentCredentials = await readJsonIfExists(claudeCredentialsPath);
   const currentState = await readSwitchState();
-  const originalSettings = currentState?.originalSettings ?? currentSettings;
-  const originalAccount = currentState?.originalAccount ?? currentAccount;
-  const originalCredentials = currentState && Object.prototype.hasOwnProperty.call(currentState, 'originalCredentials')
+  const canReuseActiveSnapshot = currentState?.active === true;
+  const originalSettings = canReuseActiveSnapshot
+    ? currentState?.originalSettings ?? currentSettings
+    : currentSettings;
+  const originalAccount = canReuseActiveSnapshot
+    ? currentState?.originalAccount ?? currentAccount
+    : currentAccount;
+  const originalCredentials = canReuseActiveSnapshot
+    && currentState
+    && Object.prototype.hasOwnProperty.call(currentState, 'originalCredentials')
     ? currentState.originalCredentials
     : currentCredentials;
   const transport = await resolveClaudeTransportForProfile({
