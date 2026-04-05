@@ -22,6 +22,7 @@ import {
   readManagedTokenSecret,
   saveManagedProviderTokenSecret
 } from './lib/secrets.js';
+import { fetchKiloFreeModels } from './lib/kilo.js';
 import { fetchOllamaModels, normalizeOllamaBaseUrl } from './lib/ollama.js';
 import {
   assertInteractiveTerminal,
@@ -752,6 +753,59 @@ async function createNewConnection(store) {
     }
 
     const catalog = store.getProviderCatalog(provider.id);
+    let workingCatalog = catalog;
+
+    if (catalog.id === 'kilo-free') {
+      let discovered;
+
+      try {
+        discovered = await fetchKiloFreeModels();
+      } catch (error) {
+        renderInfoScreen({
+          title: 'No se pudo cargar Kilo',
+          subtitle: 'Claude Connect intento consultar /models para descubrir solo los modelos gratuitos.',
+          lines: [
+            colorize(`Base URL: ${catalog.baseUrl}`, colors.soft),
+            colorize(error instanceof Error ? error.message : String(error), colors.warning)
+          ],
+          footer: 'Presiona una tecla para volver'
+        });
+
+        const failedKiloResult = await waitForAnyKey();
+
+        if (isExit(failedKiloResult)) {
+          return failedKiloResult;
+        }
+
+        continue;
+      }
+
+      if (discovered.models.length === 0) {
+        renderInfoScreen({
+          title: 'Sin modelos free en Kilo',
+          subtitle: 'El endpoint /models respondio, pero no hubo modelos gratuitos filtrables.',
+          lines: [
+            colorize(`Base URL: ${catalog.baseUrl}`, colors.soft),
+            colorize('Revisa la disponibilidad actual del gateway y vuelve a intentarlo.', colors.soft)
+          ],
+          footer: 'Presiona una tecla para volver'
+        });
+
+        const emptyKiloResult = await waitForAnyKey();
+
+        if (isExit(emptyKiloResult)) {
+          return emptyKiloResult;
+        }
+
+        continue;
+      }
+
+      workingCatalog = {
+        ...catalog,
+        models: discovered.models,
+        modelCount: discovered.models.length
+      };
+    }
 
     if (catalog.id === 'ollama') {
       const ollamaBaseUrlInput = await promptText({
@@ -889,16 +943,16 @@ async function createNewConnection(store) {
       return await waitForAnyKey();
     }
 
-    const totalSteps = catalog.models.length > 1 ? 3 : 2;
-    let model = catalog.models[0];
+    const totalSteps = workingCatalog.models.length > 1 ? 3 : 2;
+    let model = workingCatalog.models[0];
 
-    if (catalog.models.length > 1) {
+    if (workingCatalog.models.length > 1) {
       model = await selectFromList({
         step: 2,
         totalSteps,
         title: 'Selecciona el modelo',
-        subtitle: `Proveedor: ${catalog.name}.`,
-        items: modelItems(catalog.models),
+        subtitle: `Proveedor: ${workingCatalog.name}.`,
+        items: modelItems(workingCatalog.models),
         allowBack: true,
         detailBuilder: (selected) => [
           `Modelo: ${selected.value.id}`,
@@ -922,15 +976,15 @@ async function createNewConnection(store) {
         step: totalSteps,
         totalSteps,
         title: 'Tipo de conexion',
-        subtitle: `${catalog.name} usara el modelo ${model.name}.`,
-        items: authItems(catalog.authMethods),
+        subtitle: `${workingCatalog.name} usara el modelo ${model.name}.`,
+        items: authItems(workingCatalog.authMethods),
         allowBack: true,
         detailBuilder: (selected) => [
           `Metodo: ${selected.value.name}`,
           selected.value.description,
-          selected.value.id === 'oauth' && catalog.oauth
-            ? `Se abrira: ${catalog.oauth.browserAuthUrl}?user_code=...&client=qwen-code`
-            : `Base URL: ${catalog.baseUrl}`
+          selected.value.id === 'oauth' && workingCatalog.oauth
+            ? `Se abrira: ${workingCatalog.oauth.browserAuthUrl}?user_code=...&client=qwen-code`
+            : `Base URL: ${workingCatalog.baseUrl}`
         ]
       });
 
@@ -943,17 +997,17 @@ async function createNewConnection(store) {
       }
 
       const profileName = slugifyProfileName(`${provider.id}-${model.id}-${authMethod.id}`);
-      const apiKeyEnvVar = catalog.defaultApiKeyEnvVar;
+      const apiKeyEnvVar = workingCatalog.defaultApiKeyEnvVar;
       let providerSecretFile = '';
       let oauthSession;
 
       if (authMethod.id === 'token') {
-        const existingProviderSecret = await readManagedProviderTokenSecret(catalog.id);
+        const existingProviderSecret = await readManagedProviderTokenSecret(workingCatalog.id);
         const apiKeyValue = await promptText({
           step: totalSteps,
           totalSteps,
           title: 'API key del proveedor',
-          subtitle: `Modelo: ${model.name}. Esta API key se compartira con todos los modelos de ${catalog.name}.`,
+          subtitle: `Modelo: ${model.name}. Esta API key se compartira con todos los modelos de ${workingCatalog.name}.`,
           label: 'API key',
           placeholder: existingProviderSecret?.secret?.token
             ? 'Deja vacio para conservar la API key compartida'
@@ -972,8 +1026,8 @@ async function createNewConnection(store) {
 
         if (apiKeyValue.trim().length > 0) {
           providerSecretFile = await saveManagedProviderTokenSecret({
-            providerId: catalog.id,
-            providerName: catalog.name,
+            providerId: workingCatalog.id,
+            providerName: workingCatalog.name,
             envVar: apiKeyEnvVar,
             token: apiKeyValue.trim()
           });
@@ -994,7 +1048,7 @@ async function createNewConnection(store) {
 
         const oauthResult = await runOAuthAuthorization({
           providerName: catalog.name,
-          oauthConfig: catalog.oauth,
+          oauthConfig: workingCatalog.oauth,
           statusRenderer: renderOAuthStatus,
           waitUntilReady: async () => await waitForAnyKey()
         });
@@ -1007,7 +1061,7 @@ async function createNewConnection(store) {
 
         const tokenFile = await saveOAuthToken({
           profileName,
-          providerId: catalog.id,
+          providerId: workingCatalog.id,
           tokenPayload
         });
 
@@ -1030,16 +1084,17 @@ async function createNewConnection(store) {
 
         oauthSession = {
           clientId: catalog.oauth.clientId,
+          clientId: workingCatalog.oauth.clientId,
           authUrl,
-          deviceCodeUrl: catalog.oauth.deviceCodeUrl,
-          tokenUrl: catalog.oauth.tokenUrl,
+          deviceCodeUrl: workingCatalog.oauth.deviceCodeUrl,
+          tokenUrl: workingCatalog.oauth.tokenUrl,
           tokenFile,
           apiBaseUrl: 'https://portal.qwen.ai/v1'
         };
       }
 
       const profile = buildProfile({
-        provider: catalog,
+        provider: workingCatalog,
         model,
         authMethod,
         profileName,

@@ -15,6 +15,7 @@ La app hoy ya soporta:
 - proveedor `Kimi`
 - proveedor `DeepSeek`
 - proveedor `Z.AI`
+- proveedor `Kilo Code Free Models`
 - proveedor `Ollama`
 - proveedor `OpenAI`
 - proveedor `Inception Labs`
@@ -136,6 +137,28 @@ Fuente oficial:
 
 - https://docs.z.ai/devpack/tool/claude
 
+### Kilo Code Free Models
+
+- provider id: `kilo-free`
+- auth:
+  - `anonymous`
+  - `token`
+- base URL del proveedor: `https://api.kilo.ai/api/gateway`
+- integración: a través de gateway local Anthropic-compatible hacia `chat/completions`
+
+Comportamiento:
+
+- Claude Connect consulta `GET /models`
+- filtra solo modelos gratuitos con sufijo `:free` o precio cero
+- soporta modo anónimo para free models
+- también permite `KILO_API_KEY` opcional
+
+Fuentes oficiales:
+
+- https://kilo.ai/docs/gateway
+- https://kilo.ai/docs/gateway/models-and-providers
+- https://kilo.ai/docs/gateway/api-reference
+
 ### Ollama
 
 - provider id: `ollama`
@@ -253,6 +276,7 @@ Si el perfil activado es:
 - `Kimi`: Claude usa el gateway local y reenvia al endpoint Anthropic de Kimi
 - `DeepSeek`: Claude usa endpoint directo Anthropic-compatible de DeepSeek
 - `Z.AI`: Claude usa endpoint directo Anthropic-compatible de z.ai
+- `Kilo Code Free Models`: Claude usa el gateway local y reenvia a `https://api.kilo.ai/api/gateway/chat/completions`
 - `Ollama`: Claude usa el gateway local y reenvia a la URL del servidor configurado en `/api/chat`
 - `OpenAI`: Claude usa el gateway local y reenvia a `https://api.openai.com/v1/chat/completions`
 - `Inception Labs`: Claude usa el gateway local y reenvia a `https://api.inceptionlabs.ai/v1/chat/completions`

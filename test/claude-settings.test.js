@@ -371,6 +371,35 @@ test('resolveClaudeTransportForProfile supports zai direct anthropic models', as
   }
 });
 
+test('resolveClaudeTransportForProfile supports kilo free anonymous gateway models', async () => {
+  const store = createCatalogStore({ filename: ':memory:' });
+  const provider = store.getProviderCatalog('kilo-free');
+  const profile = buildProfile({
+    provider,
+    model: {
+      id: 'z-ai/glm-5:free',
+      upstreamModelId: 'z-ai/glm-5:free',
+      name: 'GLM-5 Free',
+      contextWindow: '128000',
+      transportMode: 'gateway',
+      apiStyle: 'openai-chat',
+      apiBaseUrl: 'https://api.kilo.ai/api/gateway',
+      apiPath: '/chat/completions',
+      authEnvMode: 'auth_token'
+    },
+    authMethod: provider.authMethods.find((authMethod) => authMethod.id === 'anonymous'),
+    profileName: 'kilo-free-glm-5-anonymous',
+    apiKeyEnvVar: 'KILO_API_KEY'
+  });
+  const transport = await resolveClaudeTransportForProfile({ profile });
+
+  assert.equal(transport.connectionMode, 'gateway');
+  assert.equal(transport.connectionBaseUrl, 'http://127.0.0.1:4310/anthropic');
+  assert.equal(transport.authEnvMode, 'auth_token');
+  assert.equal(transport.authToken, 'claude-connect-local');
+
+  store.close();
+});
 test('resolveClaudeTransportForProfile supports inception gateway models', async () => {
   const store = createCatalogStore({ filename: ':memory:' });
   const provider = store.getProviderCatalog('inception');

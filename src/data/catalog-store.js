@@ -621,6 +621,37 @@ const seedProviders = [
     ]
   },
   {
+    id: 'kilo-free',
+    name: 'Kilo Code Free Models',
+    vendor: 'Kilo AI',
+    description: 'Gateway OpenAI-compatible de Kilo AI. La app descubre modelos gratuitos desde /models y deja elegir entre modo anonimo o API key.',
+    docsUrl: 'https://kilo.ai/docs/gateway',
+    docsVerifiedAt: '2026-04-05',
+    baseUrl: 'https://api.kilo.ai/api/gateway',
+    defaultModelId: null,
+    defaultAuthMethodId: 'anonymous',
+    defaultApiKeyEnvVar: 'KILO_API_KEY',
+    models: [],
+    authMethods: [
+      {
+        id: 'anonymous',
+        name: 'Gratis sin token',
+        description: 'Usa solo modelos free de Kilo sin autenticar. Kilo aplica rate limit por IP para usuarios anonimos.',
+        credentialKind: 'none',
+        sortOrder: 1,
+        isDefault: 1
+      },
+      {
+        id: 'token',
+        name: 'Token',
+        description: 'Usa una API key de Kilo AI sobre el mismo gateway OpenAI-compatible.',
+        credentialKind: 'env_var',
+        sortOrder: 2,
+        isDefault: 0
+      }
+    ]
+  },
+  {
     id: 'openai',
     name: 'OpenAI',
     vendor: 'OpenAI',

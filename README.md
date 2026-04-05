@@ -1,11 +1,11 @@
 # Claude Connect
 
-> Conecta `Claude Code` con `OpenCode Go`, `Zen`, `Kimi`, `DeepSeek`, `Z.AI`, `Ollama`, `OpenAI`, `Inception Labs`, `OpenRouter` y `Qwen` desde una interfaz de consola clara, rápida y reversible.
+> Conecta `Claude Code` con `OpenCode Go`, `Zen`, `Kimi`, `DeepSeek`, `Z.AI`, `Kilo Code Free Models`, `Ollama`, `OpenAI`, `Inception Labs`, `OpenRouter` y `Qwen` desde una interfaz de consola clara, rápida y reversible.
 
 [![npm version](https://img.shields.io/npm/v/claude-connect?style=for-the-badge&logo=npm&color=cb3837)](https://www.npmjs.com/package/claude-connect)
 [![node](https://img.shields.io/badge/node-%3E%3D22-2f7d32?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![license](https://img.shields.io/badge/license-MIT-0f172a?style=for-the-badge)](./LICENSE)
-[![providers](https://img.shields.io/badge/providers-OpenCode%20Go%20%7C%20Zen%20%7C%20Kimi%20%7C%20DeepSeek%20%7C%20Z.AI%20%7C%20Ollama%20%7C%20OpenAI%20%7C%20Inception%20Labs%20%7C%20OpenRouter%20%7C%20Qwen-0ea5e9?style=for-the-badge)](https://www.npmjs.com/package/claude-connect)
+[![providers](https://img.shields.io/badge/providers-OpenCode%20Go%20%7C%20Zen%20%7C%20Kimi%20%7C%20DeepSeek%20%7C%20Z.AI%20%7C%20Kilo%20Free%20Models%20%7C%20Ollama%20%7C%20OpenAI%20%7C%20Inception%20Labs%20%7C%20OpenRouter%20%7C%20Qwen-0ea5e9?style=for-the-badge)](https://www.npmjs.com/package/claude-connect)
 
 <p align="center">
   <img src="./ezgif-871b2bc9267494c5.gif" alt="Claude Connect demo" width="980" />
@@ -17,7 +17,7 @@
 
 ### Highlights
 
-- `OpenCode Go`, `Zen`, `Kimi`, `DeepSeek`, `Z.AI`, `Ollama`, `OpenAI`, `Inception Labs`, `OpenRouter` y `Qwen` listos desde el primer arranque
+- `OpenCode Go`, `Zen`, `Kimi`, `DeepSeek`, `Z.AI`, `Kilo Code Free Models`, `Ollama`, `OpenAI`, `Inception Labs`, `OpenRouter` y `Qwen` listos desde el primer arranque
 - soporte para `Token` y `OAuth` cuando el proveedor lo permite
 - API keys compartidas por proveedor para no repetir el mismo token en cada modelo
 - activación reversible sobre la instalación real de `Claude Code`
@@ -83,6 +83,7 @@ Al activar:
 - `Kimi` usa gateway local y reenvia al endpoint Anthropic de `https://api.kimi.com/coding/`
 - `DeepSeek` apunta a `https://api.deepseek.com/anthropic`
 - `Z.AI` apunta a `https://api.z.ai/api/anthropic`
+- `Kilo Code Free Models` consulta `https://api.kilo.ai/api/gateway/models`, filtra solo modelos gratuitos y usa `https://api.kilo.ai/api/gateway/chat/completions`
 - `Ollama` pide una URL local o remota, valida `/api/tags` y usa el gateway local sobre `.../api/chat`
 - `OpenAI` usa el gateway local sobre `https://api.openai.com/v1/chat/completions`
 - `Inception Labs` usa el gateway local sobre `https://api.inceptionlabs.ai/v1/chat/completions`
@@ -100,6 +101,7 @@ Al activar:
 | `Kimi` | `kimi-for-coding` | `Token` | Gateway local |
 | `DeepSeek` | `deepseek-chat`, `deepseek-reasoner` | `Token` | Directa |
 | `Z.AI` | `glm-5.1`, `glm-4.7`, `glm-4.5-air` | `Token` | Directa |
+| `Kilo Code Free Models` | modelos gratuitos descubiertos desde `/models` | `Gratis sin token`, `Token` | Gateway local |
 | `Ollama` | modelos descubiertos desde tu servidor | `Servidor Ollama` | Gateway local |
 | `OpenAI` | `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.3-codex`, `gpt-5.2-codex`, `gpt-5.2`, `gpt-5.1-codex-max`, `gpt-5.1-codex-mini` | `Token` | Gateway local |
 | `Inception Labs` | `mercury-2` | `Token` | Gateway local |
@@ -156,6 +158,16 @@ Nota sobre `Z.AI`:
 - al activar un perfil de `Z.AI`, tambien mapea `ANTHROPIC_DEFAULT_HAIKU_MODEL`, `ANTHROPIC_DEFAULT_SONNET_MODEL` y `ANTHROPIC_DEFAULT_OPUS_MODEL` al modelo elegido para que Claude Code use `GLM` de forma consistente
 - referencias oficiales:
   - https://docs.z.ai/devpack/tool/claude
+
+Nota sobre `Kilo Code Free Models`:
+
+- la app consulta `GET https://api.kilo.ai/api/gateway/models`
+- filtra solo modelos gratuitos usando `:free` y metadatos de precio cero
+- soporta uso anonimo para free models y tambien `KILO_API_KEY` opcional
+- referencias oficiales:
+  - https://kilo.ai/docs/gateway
+  - https://kilo.ai/docs/gateway/models-and-providers
+  - https://kilo.ai/docs/gateway/api-reference
 
 Nota sobre `Ollama`:
 

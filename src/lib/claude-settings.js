@@ -184,6 +184,16 @@ export async function resolveClaudeTransportForProfile({
     };
   }
 
+  if (authMethod === 'anonymous') {
+    return {
+      connectionMode: 'gateway',
+      connectionBaseUrl: gatewayBaseUrl,
+      authToken: 'claude-connect-local',
+      authEnvMode: 'auth_token',
+      extraEnv: {}
+    };
+  }
+
   return {
     connectionMode: 'gateway',
     connectionBaseUrl: gatewayBaseUrl,
@@ -234,6 +244,9 @@ export function buildClaudeSettingsForProfile({
 
   if (authMethod === 'token') {
     env.CLAUDE_CONNECT_TOKEN_ENV_VAR = profile.auth.envVar;
+    delete env.CLAUDE_CONNECT_TOKEN_FILE;
+  } else if (authMethod === 'anonymous') {
+    delete env.CLAUDE_CONNECT_TOKEN_ENV_VAR;
     delete env.CLAUDE_CONNECT_TOKEN_FILE;
   } else if (authMethod === 'server') {
     delete env.CLAUDE_CONNECT_TOKEN_ENV_VAR;

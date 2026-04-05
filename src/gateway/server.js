@@ -264,6 +264,19 @@ async function resolveGatewayContext() {
     };
   }
 
+  if (authMethod === 'anonymous') {
+    const upstream = resolveGatewayUpstreamConfig(profile);
+
+    return {
+      profile,
+      authMethod,
+      upstreamBaseUrl: upstream.upstreamBaseUrl,
+      upstreamApiStyle: upstream.upstreamApiStyle,
+      upstreamApiPath: upstream.upstreamApiPath,
+      accessToken: null
+    };
+  }
+
   if (authMethod === 'token') {
     const envVar = profile?.auth?.envVar;
     let token = typeof envVar === 'string' ? process.env[envVar] : '';
@@ -399,15 +412,19 @@ async function forwardUpstreamRequest({ targetUrl, headers, payload, context, re
 
 async function forwardChatCompletion({ openAiRequest, context, refreshOnUnauthorized = true }) {
   const targetUrl = `${context.upstreamBaseUrl.replace(/\/$/, '')}${context.upstreamApiPath || '/chat/completions'}`;
+  const headers = {
+    'content-type': 'application/json',
+    accept: 'application/json',
+    'user-agent': 'claude-connect-gateway/0.1.0'
+  };
+
+  if (typeof context.accessToken === 'string' && context.accessToken.length > 0) {
+    headers.authorization = `Bearer ${context.accessToken}`;
+  }
 
   return forwardUpstreamRequest({
     targetUrl,
-    headers: {
-      'content-type': 'application/json',
-      accept: 'application/json',
-      authorization: `Bearer ${context.accessToken}`,
-      'user-agent': 'claude-connect-gateway/0.1.0'
-    },
+    headers,
     payload: openAiRequest,
     context,
     refreshOnUnauthorized
