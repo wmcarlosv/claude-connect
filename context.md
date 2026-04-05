@@ -17,6 +17,7 @@ La app hoy ya soporta:
 - proveedor `Z.AI`
 - proveedor `Kilo Code Free Models`
 - proveedor `Ollama`
+- proveedor `Ollama Cloud Models`
 - proveedor `OpenAI`
 - proveedor `Inception Labs`
 - proveedor `OpenRouter`
@@ -35,6 +36,7 @@ La app hoy ya soporta:
   - `.credentials.json`
 - detección automática de rutas en Linux y Windows
 - navegación con `Volver` y confirmación de salida con doble `Esc`
+- paginación de listas largas `5 en 5` para catálogos grandes
 
 ## Proveedores activos
 
@@ -186,6 +188,27 @@ Fuente oficial:
 - https://docs.ollama.com/openai
 - https://docs.ollama.com/api/tags
 
+### Ollama Cloud Models
+
+- provider id: `ollama-cloud`
+- auth: `token`
+- base URL del proveedor: `https://ollama.com`
+- integración: a través de gateway local Anthropic-compatible hacia el endpoint nativo `api/chat`
+
+Comportamiento:
+
+- Claude Connect consulta `GET https://ollama.com/api/tags` usando `OLLAMA_API_KEY`
+- si el endpoint devuelve sufijos cloud, Claude Connect los usa
+- si el endpoint devuelve nombres limpios sin sufijo, Claude Connect usa igualmente la lista real devuelta por tu cuenta
+- Ollama no expone un flag oficial de modelos free en ese endpoint
+- la disponibilidad real depende de la cuenta/plan del usuario
+
+Fuentes oficiales:
+
+- https://docs.ollama.com/cloud
+- https://docs.ollama.com/api/authentication
+- https://docs.ollama.com/api/tags
+
 ### OpenAI
 
 - provider id: `openai`
@@ -278,6 +301,7 @@ Si el perfil activado es:
 - `Z.AI`: Claude usa endpoint directo Anthropic-compatible de z.ai
 - `Kilo Code Free Models`: Claude usa el gateway local y reenvia a `https://api.kilo.ai/api/gateway/chat/completions`
 - `Ollama`: Claude usa el gateway local y reenvia a la URL del servidor configurado en `/api/chat`
+- `Ollama Cloud Models`: Claude usa el gateway local y reenvia a `https://ollama.com/api/chat`
 - `OpenAI`: Claude usa el gateway local y reenvia a `https://api.openai.com/v1/chat/completions`
 - `Inception Labs`: Claude usa el gateway local y reenvia a `https://api.inceptionlabs.ai/v1/chat/completions`
 - `OpenRouter`: Claude usa el gateway local y envía `openrouter/free`

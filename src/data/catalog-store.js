@@ -652,6 +652,29 @@ const seedProviders = [
     ]
   },
   {
+    id: 'ollama-cloud',
+    name: 'Ollama Cloud Models',
+    vendor: 'Ollama',
+    description: 'Modelos de Ollama Cloud consultados directamente en ollama.com con OLLAMA_API_KEY. La app usa los modelos que devuelve tu cuenta desde /api/tags.',
+    docsUrl: 'https://docs.ollama.com/cloud',
+    docsVerifiedAt: '2026-04-05',
+    baseUrl: 'https://ollama.com',
+    defaultModelId: null,
+    defaultAuthMethodId: 'token',
+    defaultApiKeyEnvVar: 'OLLAMA_API_KEY',
+    models: [],
+    authMethods: [
+      {
+        id: 'token',
+        name: 'Token',
+        description: 'Conexion por OLLAMA_API_KEY contra ollama.com/api.',
+        credentialKind: 'env_var',
+        sortOrder: 1,
+        isDefault: 1
+      }
+    ]
+  },
+  {
     id: 'openai',
     name: 'OpenAI',
     vendor: 'OpenAI',

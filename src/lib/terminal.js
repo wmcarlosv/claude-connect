@@ -125,7 +125,8 @@ export function selectFromList({
   items,
   detailBuilder,
   footerHint,
-  allowBack = false
+  allowBack = false,
+  pageSize = 5
 }) {
   return new Promise((resolve, reject) => {
     const options = allowBack
@@ -149,13 +150,26 @@ export function selectFromList({
 
     const render = () => {
       const selected = options[selectedIndex];
+      const safePageSize = Math.max(1, pageSize);
+      const pageStart = Math.floor(selectedIndex / safePageSize) * safePageSize;
+      const pageEnd = Math.min(options.length, pageStart + safePageSize);
+      const visibleOptions = options.slice(pageStart, pageEnd);
       const detailLines = selected.value === navigation.BACK
         ? ['Regresa a la pantalla anterior.']
         : detailBuilder(selected);
+      const pageLine = options.length > safePageSize
+        ? colorize(
+            `Mostrando ${pageStart + 1}-${pageEnd} de ${options.length}`,
+            colors.dim,
+            colors.accentSoft
+          )
+        : null;
       const body = [
         colorize(`Paso ${step}/${totalSteps}`, colors.warning),
+        ...(pageLine ? [pageLine] : []),
         '',
-        ...options.flatMap((item, index) => {
+        ...visibleOptions.flatMap((item, visibleIndex) => {
+          const index = pageStart + visibleIndex;
           const active = index === selectedIndex;
           const prefix = active
             ? colorize('›', colors.bold, colors.accent)

@@ -433,14 +433,19 @@ async function forwardChatCompletion({ openAiRequest, context, refreshOnUnauthor
 
 async function forwardOllamaChat({ ollamaRequest, context, refreshOnUnauthorized = true }) {
   const targetUrl = `${context.upstreamBaseUrl.replace(/\/$/, '')}${context.upstreamApiPath || '/api/chat'}`;
+  const headers = {
+    'content-type': 'application/json',
+    accept: 'application/json',
+    'user-agent': 'claude-connect-gateway/0.1.0'
+  };
+
+  if (typeof context.accessToken === 'string' && context.accessToken.length > 0 && context.accessToken !== 'ollama') {
+    headers.authorization = `Bearer ${context.accessToken}`;
+  }
 
   return forwardUpstreamRequest({
     targetUrl,
-    headers: {
-      'content-type': 'application/json',
-      accept: 'application/json',
-      'user-agent': 'claude-connect-gateway/0.1.0'
-    },
+    headers,
     payload: ollamaRequest,
     context,
     refreshOnUnauthorized

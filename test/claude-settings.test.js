@@ -400,6 +400,36 @@ test('resolveClaudeTransportForProfile supports kilo free anonymous gateway mode
 
   store.close();
 });
+
+test('resolveClaudeTransportForProfile supports ollama cloud token gateway models', async () => {
+  const store = createCatalogStore({ filename: ':memory:' });
+  const provider = store.getProviderCatalog('ollama-cloud');
+  const profile = buildProfile({
+    provider,
+    model: {
+      id: 'glm-4.7:cloud',
+      upstreamModelId: 'glm-4.7:cloud',
+      name: 'GLM-4.7 Cloud',
+      contextWindow: 'Auto',
+      transportMode: 'gateway',
+      apiStyle: 'ollama-chat',
+      apiBaseUrl: 'https://ollama.com',
+      apiPath: '/api/chat',
+      authEnvMode: 'auth_token'
+    },
+    authMethod: provider.authMethods[0],
+    profileName: 'ollama-cloud-glm-4-7-token',
+    apiKeyEnvVar: 'OLLAMA_API_KEY'
+  });
+  const transport = await resolveClaudeTransportForProfile({ profile });
+
+  assert.equal(transport.connectionMode, 'gateway');
+  assert.equal(transport.connectionBaseUrl, 'http://127.0.0.1:4310/anthropic');
+  assert.equal(transport.authEnvMode, 'auth_token');
+  assert.equal(transport.authToken, 'claude-connect-local');
+
+  store.close();
+});
 test('resolveClaudeTransportForProfile supports inception gateway models', async () => {
   const store = createCatalogStore({ filename: ':memory:' });
   const provider = store.getProviderCatalog('inception');

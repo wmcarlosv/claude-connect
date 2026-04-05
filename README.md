@@ -1,11 +1,11 @@
 # Claude Connect
 
-> Conecta `Claude Code` con `OpenCode Go`, `Zen`, `Kimi`, `DeepSeek`, `Z.AI`, `Kilo Code Free Models`, `Ollama`, `OpenAI`, `Inception Labs`, `OpenRouter` y `Qwen` desde una interfaz de consola clara, rápida y reversible.
+> Conecta `Claude Code` con `OpenCode Go`, `Zen`, `Kimi`, `DeepSeek`, `Z.AI`, `Kilo Code Free Models`, `Ollama`, `Ollama Cloud Models`, `OpenAI`, `Inception Labs`, `OpenRouter` y `Qwen` desde una interfaz de consola clara, rápida y reversible.
 
 [![npm version](https://img.shields.io/npm/v/claude-connect?style=for-the-badge&logo=npm&color=cb3837)](https://www.npmjs.com/package/claude-connect)
 [![node](https://img.shields.io/badge/node-%3E%3D22-2f7d32?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![license](https://img.shields.io/badge/license-MIT-0f172a?style=for-the-badge)](./LICENSE)
-[![providers](https://img.shields.io/badge/providers-OpenCode%20Go%20%7C%20Zen%20%7C%20Kimi%20%7C%20DeepSeek%20%7C%20Z.AI%20%7C%20Kilo%20Free%20Models%20%7C%20Ollama%20%7C%20OpenAI%20%7C%20Inception%20Labs%20%7C%20OpenRouter%20%7C%20Qwen-0ea5e9?style=for-the-badge)](https://www.npmjs.com/package/claude-connect)
+[![providers](https://img.shields.io/badge/providers-OpenCode%20Go%20%7C%20Zen%20%7C%20Kimi%20%7C%20DeepSeek%20%7C%20Z.AI%20%7C%20Kilo%20Free%20Models%20%7C%20Ollama%20%7C%20Ollama%20Cloud%20Models%20%7C%20OpenAI%20%7C%20Inception%20Labs%20%7C%20OpenRouter%20%7C%20Qwen-0ea5e9?style=for-the-badge)](https://www.npmjs.com/package/claude-connect)
 
 <p align="center">
   <img src="./ezgif-871b2bc9267494c5.gif" alt="Claude Connect demo" width="980" />
@@ -17,7 +17,7 @@
 
 ### Highlights
 
-- `OpenCode Go`, `Zen`, `Kimi`, `DeepSeek`, `Z.AI`, `Kilo Code Free Models`, `Ollama`, `OpenAI`, `Inception Labs`, `OpenRouter` y `Qwen` listos desde el primer arranque
+- `OpenCode Go`, `Zen`, `Kimi`, `DeepSeek`, `Z.AI`, `Kilo Code Free Models`, `Ollama`, `Ollama Cloud Models`, `OpenAI`, `Inception Labs`, `OpenRouter` y `Qwen` listos desde el primer arranque
 - soporte para `Token` y `OAuth` cuando el proveedor lo permite
 - API keys compartidas por proveedor para no repetir el mismo token en cada modelo
 - activación reversible sobre la instalación real de `Claude Code`
@@ -26,6 +26,7 @@
 - detección automática de rutas en Linux y Windows
 - catálogo local en SQLite generado automáticamente
 - interfaz de consola con navegación simple y profesional
+- listas largas paginadas de `5 en 5` para que la UI no se rompa con catálogos grandes
 
 ## Package
 
@@ -85,6 +86,7 @@ Al activar:
 - `Z.AI` apunta a `https://api.z.ai/api/anthropic`
 - `Kilo Code Free Models` consulta `https://api.kilo.ai/api/gateway/models`, filtra solo modelos gratuitos y usa `https://api.kilo.ai/api/gateway/chat/completions`
 - `Ollama` pide una URL local o remota, valida `/api/tags` y usa el gateway local sobre `.../api/chat`
+- `Ollama Cloud Models` consulta `https://ollama.com/api/tags` con `OLLAMA_API_KEY`, usa los modelos que realmente devuelve tu cuenta y trabaja sobre `https://ollama.com/api/chat`
 - `OpenAI` usa el gateway local sobre `https://api.openai.com/v1/chat/completions`
 - `Inception Labs` usa el gateway local sobre `https://api.inceptionlabs.ai/v1/chat/completions`
 - `OpenRouter` usa `openrouter/free` por gateway sobre `https://openrouter.ai/api/v1`
@@ -103,6 +105,7 @@ Al activar:
 | `Z.AI` | `glm-5.1`, `glm-4.7`, `glm-4.5-air` | `Token` | Directa |
 | `Kilo Code Free Models` | modelos gratuitos descubiertos desde `/models` | `Gratis sin token`, `Token` | Gateway local |
 | `Ollama` | modelos descubiertos desde tu servidor | `Servidor Ollama` | Gateway local |
+| `Ollama Cloud Models` | modelos cloud descubiertos desde `ollama.com/api/tags` | `Token` | Gateway local |
 | `OpenAI` | `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.3-codex`, `gpt-5.2-codex`, `gpt-5.2`, `gpt-5.1-codex-max`, `gpt-5.1-codex-mini` | `Token` | Gateway local |
 | `Inception Labs` | `mercury-2` | `Token` | Gateway local |
 | `OpenRouter` | `openrouter/free` | `Token` | Gateway local |
@@ -178,6 +181,17 @@ Nota sobre `Ollama`:
 - servidores remotos pueden seguir fallando por timeout, auth cloud o respuestas pobres del modelo; la app ya distingue mejor esos casos
 - referencia oficial:
   - https://docs.ollama.com/openai
+  - https://docs.ollama.com/api/tags
+
+Nota sobre `Ollama Cloud Models`:
+
+- la app consulta `GET https://ollama.com/api/tags` con `OLLAMA_API_KEY`
+- Ollama no expone un flag oficial `free` en ese endpoint
+- Claude Connect usa los modelos que realmente devuelve `ollama.com/api/tags` para tu cuenta; si aparecen sufijos cloud los respeta, y si no aparecen usa la lista devuelta igualmente
+- la disponibilidad real depende de tu cuenta/plan de Ollama
+- referencias oficiales:
+  - https://docs.ollama.com/cloud
+  - https://docs.ollama.com/api/authentication
   - https://docs.ollama.com/api/tags
 
 ## What It Stores

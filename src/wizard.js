@@ -23,6 +23,7 @@ import {
   saveManagedProviderTokenSecret
 } from './lib/secrets.js';
 import { fetchKiloFreeModels } from './lib/kilo.js';
+import { fetchOllamaCloudModels } from './lib/ollama-cloud.js';
 import { fetchOllamaModels, normalizeOllamaBaseUrl } from './lib/ollama.js';
 import {
   assertInteractiveTerminal,
@@ -937,6 +938,149 @@ async function createNewConnection(store) {
         profileName,
         apiKeyEnvVar: catalog.defaultApiKeyEnvVar
       });
+
+      const filePath = await saveProfile(profile);
+      renderSummary({ profile, filePath });
+      return await waitForAnyKey();
+    }
+
+    if (catalog.id === 'ollama-cloud') {
+      const authMethod = catalog.authMethods[0];
+      const existingProviderSecret = await readManagedProviderTokenSecret(catalog.id);
+      const apiKeyValue = await promptText({
+        step: 2,
+        totalSteps: 4,
+        title: 'API key de Ollama Cloud',
+        subtitle: 'Se usara para consultar ollama.com/api/tags y listar modelos cloud.',
+        label: 'OLLAMA_API_KEY',
+        placeholder: existingProviderSecret?.secret?.token
+          ? 'Deja vacio para conservar la API key compartida'
+          : 'Pega aqui tu OLLAMA_API_KEY',
+        secret: true,
+        allowBack: true
+      });
+
+      if (isExit(apiKeyValue)) {
+        return apiKeyValue;
+      }
+
+      if (isBack(apiKeyValue)) {
+        continue;
+      }
+
+      let providerSecretFile = existingProviderSecret?.filePath ?? '';
+      let tokenForDiscovery = existingProviderSecret?.secret?.token ?? '';
+
+      if (apiKeyValue.trim().length > 0) {
+        tokenForDiscovery = apiKeyValue.trim();
+        providerSecretFile = await saveManagedProviderTokenSecret({
+          providerId: catalog.id,
+          providerName: catalog.name,
+          envVar: catalog.defaultApiKeyEnvVar,
+          token: tokenForDiscovery
+        });
+      }
+
+      if (tokenForDiscovery.trim().length === 0) {
+        renderInfoScreen({
+          title: 'Falta OLLAMA_API_KEY',
+          subtitle: 'Ollama Cloud requiere una API key para consultar modelos en ollama.com/api.',
+          lines: [
+            colorize('Guarda una OLLAMA_API_KEY y vuelve a intentarlo.', colors.warning)
+          ],
+          footer: 'Presiona una tecla para volver'
+        });
+
+        const missingKeyResult = await waitForAnyKey();
+
+        if (isExit(missingKeyResult)) {
+          return missingKeyResult;
+        }
+
+        continue;
+      }
+
+      let discovered;
+
+      try {
+        discovered = await fetchOllamaCloudModels({
+          apiKey: tokenForDiscovery
+        });
+      } catch (error) {
+        renderInfoScreen({
+          title: 'No se pudo cargar Ollama Cloud',
+          subtitle: 'Claude Connect intento consultar ollama.com/api/tags para cargar los modelos de tu cuenta.',
+          lines: [
+            colorize(`Base URL: ${catalog.baseUrl}/api`, colors.soft),
+            colorize(error instanceof Error ? error.message : String(error), colors.warning)
+          ],
+          footer: 'Presiona una tecla para volver'
+        });
+
+        const failedCloudResult = await waitForAnyKey();
+
+        if (isExit(failedCloudResult)) {
+          return failedCloudResult;
+        }
+
+        continue;
+      }
+
+      if (discovered.models.length === 0) {
+        renderInfoScreen({
+          title: 'Sin modelos cloud en Ollama',
+          subtitle: 'La API respondio, pero no devolvio modelos utilizables para esta cuenta.',
+          lines: [
+            colorize('Ollama no expone un flag oficial de modelos free en /api/tags.', colors.soft),
+            colorize('Claude Connect usa los modelos que realmente devuelve tu cuenta en ollama.com/api/tags.', colors.soft)
+          ],
+          footer: 'Presiona una tecla para volver'
+        });
+
+        const emptyCloudResult = await waitForAnyKey();
+
+        if (isExit(emptyCloudResult)) {
+          return emptyCloudResult;
+        }
+
+        continue;
+      }
+
+      const discoveredModel = await selectFromList({
+        step: 3,
+        totalSteps: 4,
+        title: 'Selecciona el modelo cloud',
+        subtitle: 'Fuente: ollama.com/api/tags.',
+        items: modelItems(discovered.models),
+        allowBack: true,
+        detailBuilder: (selected) => [
+          `Modelo: ${selected.value.id}`,
+          `Categoria: ${selected.value.category}`,
+          `Contexto: ${selected.value.contextWindow}`,
+          selected.value.summary
+        ]
+      });
+
+      if (isExit(discoveredModel)) {
+        return discoveredModel;
+      }
+
+      if (isBack(discoveredModel)) {
+        continue;
+      }
+
+      const profileName = slugifyProfileName(`${provider.id}-${discoveredModel.id}-${authMethod.id}`);
+      const profile = buildProfile({
+        provider: catalog,
+        model: discoveredModel,
+        authMethod,
+        profileName,
+        apiKeyEnvVar: catalog.defaultApiKeyEnvVar
+      });
+
+      if (providerSecretFile) {
+        profile.auth.providerSecretFile = providerSecretFile;
+      }
 
       const filePath = await saveProfile(profile);
       renderSummary({ profile, filePath });
