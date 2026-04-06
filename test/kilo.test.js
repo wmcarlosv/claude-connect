@@ -4,6 +4,9 @@ import { fetchKiloFreeModels, isFreeKiloModel } from '../src/lib/kilo.js';
 
 test('isFreeKiloModel accepts suffix and zero-priced free models', () => {
   assert.equal(isFreeKiloModel({ id: 'z-ai/glm-5:free' }), true);
+  assert.equal(isFreeKiloModel({ id: 'giga-potato' }), true);
+  assert.equal(isFreeKiloModel({ id: 'mystery-model', free: true }), true);
+  assert.equal(isFreeKiloModel({ id: 'vendor/model-x', name: 'Model X Free Tier' }), true);
   assert.equal(isFreeKiloModel({
     id: 'giga-potato',
     pricing: {
@@ -39,6 +42,13 @@ test('fetchKiloFreeModels maps only free models from /models', async () => {
           }
         },
         {
+          id: 'giga-potato',
+          object: 'model',
+          owned_by: 'community',
+          name: 'Giga Potato',
+          context_length: 64000
+        },
+        {
           id: 'openai/gpt-5.2',
           object: 'model',
           owned_by: 'openai',
@@ -57,8 +67,9 @@ test('fetchKiloFreeModels maps only free models from /models', async () => {
     const result = await fetchKiloFreeModels();
 
     assert.equal(result.baseUrl, 'https://api.kilo.ai/api/gateway');
-    assert.equal(result.models.length, 1);
+    assert.equal(result.models.length, 2);
     assert.equal(result.models[0].id, 'z-ai/glm-5:free');
+    assert.equal(result.models[1].id, 'giga-potato');
     assert.equal(result.models[0].apiBaseUrl, 'https://api.kilo.ai/api/gateway');
     assert.equal(result.models[0].apiPath, '/chat/completions');
     assert.equal(result.models[0].transportMode, 'gateway');

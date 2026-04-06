@@ -1,4 +1,11 @@
 const KILO_GATEWAY_BASE_URL = 'https://api.kilo.ai/api/gateway';
+const DOCUMENTED_FREE_KILO_MODELS = new Set([
+  'minimax/minimax-m2.1:free',
+  'z-ai/glm-5:free',
+  'giga-potato',
+  'corethink:free',
+  'arcee-ai/trinity-large-preview:free'
+]);
 
 function describeRequestError(error) {
   if (error && typeof error === 'object') {
@@ -25,9 +32,17 @@ function isZeroLike(value) {
 
 export function isFreeKiloModel(model) {
   const modelId = typeof model?.id === 'string' ? model.id : '';
+  const modelName = typeof model?.name === 'string' ? model.name : '';
   const pricing = model?.pricing && typeof model.pricing === 'object' ? model.pricing : {};
+  const tags = Array.isArray(model?.tags) ? model.tags.map((tag) => String(tag).toLowerCase()) : [];
+  const lowerId = modelId.toLowerCase();
+  const lowerName = modelName.toLowerCase();
 
-  return modelId.endsWith(':free')
+  return DOCUMENTED_FREE_KILO_MODELS.has(modelId)
+    || model?.free === true
+    || tags.includes('free')
+    || lowerId.endsWith(':free')
+    || lowerName.includes('free')
     || isZeroLike(pricing.prompt)
     || isZeroLike(pricing.completion)
     || isZeroLike(pricing.input)

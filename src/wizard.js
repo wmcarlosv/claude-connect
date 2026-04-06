@@ -350,6 +350,45 @@ async function showCatalog(store) {
   }
 
   const catalog = store.getProviderCatalog(provider.id);
+  let modelLines = catalog.models.map((model) => colorize(`${model.name} · ${model.summary}`, colors.soft));
+
+  if (catalog.id === 'kilo-free') {
+    try {
+      const discovered = await fetchKiloFreeModels();
+      modelLines = discovered.models.length > 0
+        ? discovered.models.map((model) => colorize(`${model.name} · ${model.summary}`, colors.soft))
+        : [colorize('No se encontraron modelos gratuitos en vivo para Kilo en este momento.', colors.warning)];
+    } catch (error) {
+      modelLines = [
+        colorize('No se pudieron cargar los modelos de Kilo en vivo.', colors.warning),
+        colorize(error instanceof Error ? error.message : String(error), colors.soft)
+      ];
+    }
+  }
+
+  if (catalog.id === 'ollama-cloud') {
+    const providerSecret = await readManagedProviderTokenSecret(catalog.id);
+    const token = typeof providerSecret?.secret?.token === 'string' ? providerSecret.secret.token.trim() : '';
+
+    if (token.length === 0) {
+      modelLines = [
+        colorize('Guarda primero OLLAMA_API_KEY en una conexion de Ollama Cloud para listar modelos en vivo.', colors.warning)
+      ];
+    } else {
+      try {
+        const discovered = await fetchOllamaCloudModels({ apiKey: token });
+        modelLines = discovered.models.length > 0
+          ? discovered.models.map((model) => colorize(`${model.name} · ${model.summary}`, colors.soft))
+          : [colorize('La cuenta no devolvio modelos utilizables en ollama.com/api/tags.', colors.warning)];
+      } catch (error) {
+        modelLines = [
+          colorize('No se pudieron cargar los modelos de Ollama Cloud en vivo.', colors.warning),
+          colorize(error instanceof Error ? error.message : String(error), colors.soft)
+        ];
+      }
+    }
+  }
+
   renderInfoScreen({
     title: 'Detalle del proveedor',
     subtitle: catalog.description,
@@ -360,7 +399,7 @@ async function showCatalog(store) {
       colorize(`Auth: ${catalog.authMethods.map((item) => item.name).join(', ')}`, colors.soft),
       '',
       colorize('Modelos', colors.bold, colors.accentSoft),
-      ...catalog.models.map((model) => colorize(`${model.name} · ${model.summary}`, colors.soft))
+      ...modelLines
     ],
     footer: 'Presiona una tecla para volver'
   });
