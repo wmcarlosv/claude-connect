@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fetchKiloFreeModels, isFreeKiloModel } from '../src/lib/kilo.js';
+import { fetchKiloFreeModels, fetchKiloModels, isFreeKiloModel } from '../src/lib/kilo.js';
 
 test('isFreeKiloModel accepts suffix and zero-priced free models', () => {
   assert.equal(isFreeKiloModel({ id: 'z-ai/glm-5:free' }), true);
@@ -23,7 +23,7 @@ test('isFreeKiloModel accepts suffix and zero-priced free models', () => {
   }), false);
 });
 
-test('fetchKiloFreeModels maps only free models from /models', async () => {
+test('fetchKiloModels maps free and paid models from /models', async () => {
   const previousFetch = globalThis.fetch;
 
   globalThis.fetch = async () => ({
@@ -64,16 +64,54 @@ test('fetchKiloFreeModels maps only free models from /models', async () => {
   });
 
   try {
-    const result = await fetchKiloFreeModels();
+    const result = await fetchKiloModels();
 
     assert.equal(result.baseUrl, 'https://api.kilo.ai/api/gateway');
-    assert.equal(result.models.length, 2);
+    assert.equal(result.models.length, 3);
     assert.equal(result.models[0].id, 'z-ai/glm-5:free');
     assert.equal(result.models[1].id, 'giga-potato');
+    assert.equal(result.models[2].id, 'openai/gpt-5.2');
+    assert.equal(result.models[2].supportsAnonymous, false);
     assert.equal(result.models[0].apiBaseUrl, 'https://api.kilo.ai/api/gateway');
     assert.equal(result.models[0].apiPath, '/chat/completions');
     assert.equal(result.models[0].transportMode, 'gateway');
     assert.equal(result.models[0].apiStyle, 'openai-chat');
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test('fetchKiloFreeModels keeps only anonymous-capable models for compatibility', async () => {
+  const previousFetch = globalThis.fetch;
+
+  globalThis.fetch = async () => ({
+    ok: true,
+    json: async () => ({
+      data: [
+        {
+          id: 'z-ai/glm-5:free',
+          object: 'model',
+          owned_by: 'z-ai',
+          name: 'GLM-5 Free'
+        },
+        {
+          id: 'openai/gpt-5.2',
+          object: 'model',
+          owned_by: 'openai',
+          name: 'GPT-5.2',
+          pricing: {
+            prompt: '0.000003',
+            completion: '0.000015'
+          }
+        }
+      ]
+    })
+  });
+
+  try {
+    const result = await fetchKiloFreeModels();
+    assert.equal(result.models.length, 1);
+    assert.equal(result.models[0].id, 'z-ai/glm-5:free');
   } finally {
     globalThis.fetch = previousFetch;
   }

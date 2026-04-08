@@ -49,18 +49,43 @@ export function isFreeKiloModel(model) {
     || isZeroLike(pricing.output);
 }
 
+function formatPrice(value) {
+  if (value == null || value === '') {
+    return null;
+  }
+
+  const numeric = Number(value);
+
+  if (!Number.isFinite(numeric)) {
+    return String(value);
+  }
+
+  if (numeric === 0) {
+    return '0';
+  }
+
+  return numeric.toExponential(2);
+}
+
 function summarizeKiloModel(model) {
   const parts = [
     model?.owned_by,
     typeof model?.context_length === 'number' ? `${model.context_length.toLocaleString('en-US')} ctx` : null
   ].filter(Boolean);
+  const pricing = model?.pricing && typeof model.pricing === 'object' ? model.pricing : {};
+  const promptPrice = formatPrice(pricing.prompt ?? pricing.input);
+  const completionPrice = formatPrice(pricing.completion ?? pricing.output);
+
+  if (promptPrice || completionPrice) {
+    parts.push(`in ${promptPrice ?? '?'} · out ${completionPrice ?? '?'}`);
+  }
 
   return parts.length > 0
     ? parts.join(' · ')
-    : 'Modelo gratuito descubierto desde /models';
+    : 'Modelo descubierto desde /models';
 }
 
-export async function fetchKiloFreeModels({ timeoutMs = 8000 } = {}) {
+export async function fetchKiloModels({ timeoutMs = 8000 } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(new Error('timeout')), timeoutMs);
 
@@ -81,18 +106,18 @@ export async function fetchKiloFreeModels({ timeoutMs = 8000 } = {}) {
     }
 
     const rawModels = Array.isArray(payload?.data) ? payload.data : [];
-    const freeModels = rawModels.filter(isFreeKiloModel);
 
     return {
       baseUrl: KILO_GATEWAY_BASE_URL,
-      models: freeModels.map((model, index) => ({
+      models: rawModels.map((model, index) => ({
         id: model.id,
         name: model.name || model.id,
-        category: 'Kilo Free Model',
+        category: isFreeKiloModel(model) ? 'Kilo Free Model' : 'Kilo Paid Model',
         contextWindow: typeof model.context_length === 'number'
           ? model.context_length.toLocaleString('en-US')
           : 'Auto',
         summary: summarizeKiloModel(model),
+        supportsAnonymous: isFreeKiloModel(model),
         upstreamModelId: model.id,
         transportMode: 'gateway',
         apiStyle: 'openai-chat',
@@ -108,4 +133,13 @@ export async function fetchKiloFreeModels({ timeoutMs = 8000 } = {}) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+export async function fetchKiloFreeModels(options = {}) {
+  const result = await fetchKiloModels(options);
+
+  return {
+    ...result,
+    models: result.models.filter((model) => model.supportsAnonymous)
+  };
 }

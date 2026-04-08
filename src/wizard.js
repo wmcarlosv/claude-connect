@@ -22,7 +22,7 @@ import {
   readManagedTokenSecret,
   saveManagedProviderTokenSecret
 } from './lib/secrets.js';
-import { fetchKiloFreeModels } from './lib/kilo.js';
+import { fetchKiloModels } from './lib/kilo.js';
 import { fetchOllamaCloudModels } from './lib/ollama-cloud.js';
 import { fetchOllamaModels, normalizeOllamaBaseUrl } from './lib/ollama.js';
 import {
@@ -354,10 +354,10 @@ async function showCatalog(store) {
 
   if (catalog.id === 'kilo-free') {
     try {
-      const discovered = await fetchKiloFreeModels();
+      const discovered = await fetchKiloModels();
       modelLines = discovered.models.length > 0
         ? discovered.models.map((model) => colorize(`${model.name} · ${model.summary}`, colors.soft))
-        : [colorize('No se encontraron modelos gratuitos en vivo para Kilo en este momento.', colors.warning)];
+        : [colorize('No se encontraron modelos utilizables en vivo para Kilo en este momento.', colors.warning)];
     } catch (error) {
       modelLines = [
         colorize('No se pudieron cargar los modelos de Kilo en vivo.', colors.warning),
@@ -799,11 +799,11 @@ async function createNewConnection(store) {
       let discovered;
 
       try {
-        discovered = await fetchKiloFreeModels();
+        discovered = await fetchKiloModels();
       } catch (error) {
         renderInfoScreen({
           title: 'No se pudo cargar Kilo',
-          subtitle: 'Claude Connect intento consultar /models para descubrir solo los modelos gratuitos.',
+          subtitle: 'Claude Connect intento consultar /models para descubrir los modelos disponibles de Kilo.',
           lines: [
             colorize(`Base URL: ${catalog.baseUrl}`, colors.soft),
             colorize(error instanceof Error ? error.message : String(error), colors.warning)
@@ -822,8 +822,8 @@ async function createNewConnection(store) {
 
       if (discovered.models.length === 0) {
         renderInfoScreen({
-          title: 'Sin modelos free en Kilo',
-          subtitle: 'El endpoint /models respondio, pero no hubo modelos gratuitos filtrables.',
+          title: 'Sin modelos en Kilo',
+          subtitle: 'El endpoint /models respondio, pero no devolvio modelos utilizables.',
           lines: [
             colorize(`Base URL: ${catalog.baseUrl}`, colors.soft),
             colorize('Revisa la disponibilidad actual del gateway y vuelve a intentarlo.', colors.soft)
@@ -1155,12 +1155,18 @@ async function createNewConnection(store) {
     }
 
     while (true) {
+      const availableAuthMethods = workingCatalog.id === 'kilo-free' && model?.supportsAnonymous === false
+        ? workingCatalog.authMethods.filter((item) => item.id === 'token')
+        : workingCatalog.authMethods;
+
       const authMethod = await selectFromList({
         step: totalSteps,
         totalSteps,
         title: 'Tipo de conexion',
-        subtitle: `${workingCatalog.name} usara el modelo ${model.name}.`,
-        items: authItems(workingCatalog.authMethods),
+        subtitle: workingCatalog.id === 'kilo-free' && model?.supportsAnonymous === false
+          ? `${workingCatalog.name} usara ${model.name}. Este modelo requiere KILO_API_KEY.`
+          : `${workingCatalog.name} usara el modelo ${model.name}.`,
+        items: authItems(availableAuthMethods),
         allowBack: true,
         detailBuilder: (selected) => [
           `Metodo: ${selected.value.name}`,

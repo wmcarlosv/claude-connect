@@ -622,9 +622,9 @@ const seedProviders = [
   },
   {
     id: 'kilo-free',
-    name: 'Kilo Code Free Models',
+    name: 'Kilo Code Models',
     vendor: 'Kilo AI',
-    description: 'Gateway OpenAI-compatible de Kilo AI. La app descubre modelos gratuitos desde /models y deja elegir entre modo anonimo o API key.',
+    description: 'Gateway OpenAI-compatible de Kilo AI. La app descubre modelos gratis y pagos desde /models, y deja elegir modo anonimo solo en los gratuitos o API key para el resto.',
     docsUrl: 'https://kilo.ai/docs/gateway',
     docsVerifiedAt: '2026-04-05',
     baseUrl: 'https://api.kilo.ai/api/gateway',

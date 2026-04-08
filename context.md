@@ -15,7 +15,7 @@ La app hoy ya soporta:
 - proveedor `Kimi`
 - proveedor `DeepSeek`
 - proveedor `Z.AI`
-- proveedor `Kilo Code Free Models`
+- proveedor `Kilo Code Models`
 - proveedor `Ollama`
 - proveedor `Ollama Cloud Models`
 - proveedor `OpenAI`
@@ -139,7 +139,7 @@ Fuente oficial:
 
 - https://docs.z.ai/devpack/tool/claude
 
-### Kilo Code Free Models
+### Kilo Code Models
 
 - provider id: `kilo-free`
 - auth:
@@ -151,9 +151,9 @@ Fuente oficial:
 Comportamiento:
 
 - Claude Connect consulta `GET /models`
-- filtra solo modelos gratuitos con sufijo `:free` o precio cero
-- soporta modo anónimo para free models
-- también permite `KILO_API_KEY` opcional
+- lista modelos gratis y pagos desde el gateway
+- soporta modo anónimo solo para modelos gratuitos
+- los modelos de pago requieren `KILO_API_KEY`
 
 Fuentes oficiales:
 
@@ -299,7 +299,7 @@ Si el perfil activado es:
 - `Kimi`: Claude usa el gateway local y reenvia al endpoint Anthropic de Kimi
 - `DeepSeek`: Claude usa endpoint directo Anthropic-compatible de DeepSeek
 - `Z.AI`: Claude usa endpoint directo Anthropic-compatible de z.ai
-- `Kilo Code Free Models`: Claude usa el gateway local y reenvia a `https://api.kilo.ai/api/gateway/chat/completions`
+- `Kilo Code Models`: Claude usa el gateway local y reenvia a `https://api.kilo.ai/api/gateway/chat/completions`
 - `Ollama`: Claude usa el gateway local y reenvia a la URL del servidor configurado en `/api/chat`
 - `Ollama Cloud Models`: Claude usa el gateway local y reenvia a `https://ollama.com/api/chat`
 - `OpenAI`: Claude usa el gateway local y reenvia a `https://api.openai.com/v1/chat/completions`
