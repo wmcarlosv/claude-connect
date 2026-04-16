@@ -11,7 +11,7 @@ import {
   detectClaudeCodeInstallation,
   findExecutableOnPath
 } from '../src/lib/app-paths.js';
-import { getDefaultCatalogDbPath } from '../src/data/catalog-store.js';
+import { getDefaultCatalogDataPath } from '../src/data/catalog-store.js';
 
 test('buildClaudeSettingsPathCandidates prioritizes linux defaults and overrides', () => {
   const candidates = buildClaudeSettingsPathCandidates({
@@ -77,8 +77,8 @@ test('buildClaudeConnectHomeCandidates supports windows and linux storage roots'
   ]);
 });
 
-test('getDefaultCatalogDbPath stores sqlite under the claude-connect home instead of cwd', () => {
-  const linuxDbPath = getDefaultCatalogDbPath({
+test('getDefaultCatalogDataPath resolves under the claude-connect home instead of cwd', () => {
+  const linuxDbPath = getDefaultCatalogDataPath({
     platform: 'linux',
     homedir: '/home/tester',
     env: {
@@ -86,7 +86,7 @@ test('getDefaultCatalogDbPath stores sqlite under the claude-connect home instea
       XDG_CONFIG_HOME: '/home/tester/.config'
     }
   });
-  const windowsDbPath = getDefaultCatalogDbPath({
+  const windowsDbPath = getDefaultCatalogDataPath({
     platform: 'win32',
     homedir: 'C:\\Users\\Tester',
     env: {
@@ -95,8 +95,8 @@ test('getDefaultCatalogDbPath stores sqlite under the claude-connect home instea
     }
   });
 
-  assert.equal(linuxDbPath, '/home/tester/.config/claude-connect/storage/claude-connect.sqlite');
-  assert.equal(windowsDbPath, 'C:\\Users\\Tester\\AppData\\Roaming\\claude-connect\\storage\\claude-connect.sqlite');
+  assert.equal(linuxDbPath, '/home/tester/.config/claude-connect/storage/catalog.json');
+  assert.equal(windowsDbPath, 'C:\\Users\\Tester\\AppData\\Roaming\\claude-connect\\storage\\catalog.json');
 });
 
 test('buildClaudeAccountPathCandidates resolves the Claude account snapshot path', () => {

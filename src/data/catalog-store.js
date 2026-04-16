@@ -1,75 +1,13 @@
-import fs from 'node:fs';
 import path from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
 import { resolveClaudeConnectHomeSync } from '../lib/app-paths.js';
 
-export function getDefaultCatalogDbPath(options = {}) {
+export function getDefaultCatalogDataPath(options = {}) {
   const pathModule = options.platform === 'win32' ? path.win32 : path.posix;
-  return pathModule.join(resolveClaudeConnectHomeSync(options), 'storage', 'claude-connect.sqlite');
+  return pathModule.join(resolveClaudeConnectHomeSync(options), 'storage', 'catalog.json');
 }
 
-export const defaultCatalogDbPath = getDefaultCatalogDbPath();
-
-const schemaSql = `
-PRAGMA foreign_keys = ON;
-
-CREATE TABLE IF NOT EXISTS providers (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  vendor TEXT NOT NULL,
-  description TEXT NOT NULL,
-  docs_url TEXT,
-  docs_verified_at TEXT,
-  base_url TEXT NOT NULL,
-  default_model_id TEXT,
-  default_auth_method_id TEXT,
-  default_api_key_env_var TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS models (
-  id TEXT PRIMARY KEY,
-  provider_id TEXT NOT NULL REFERENCES providers(id) ON DELETE CASCADE,
-  name TEXT NOT NULL,
-  category TEXT NOT NULL,
-  context_window TEXT NOT NULL,
-  summary TEXT NOT NULL,
-  upstream_model_id TEXT,
-  transport_mode TEXT NOT NULL DEFAULT 'gateway',
-  api_style TEXT NOT NULL DEFAULT 'openai-chat',
-  api_base_url TEXT,
-  api_path TEXT,
-  auth_env_mode TEXT NOT NULL DEFAULT 'auth_token',
-  supports_vision INTEGER NOT NULL DEFAULT 1,
-  sort_order INTEGER NOT NULL DEFAULT 0,
-  is_default INTEGER NOT NULL DEFAULT 0
-);
-
-CREATE TABLE IF NOT EXISTS auth_methods (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  description TEXT NOT NULL,
-  credential_kind TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS provider_auth_methods (
-  provider_id TEXT NOT NULL REFERENCES providers(id) ON DELETE CASCADE,
-  auth_method_id TEXT NOT NULL REFERENCES auth_methods(id) ON DELETE CASCADE,
-  sort_order INTEGER NOT NULL DEFAULT 0,
-  is_default INTEGER NOT NULL DEFAULT 0,
-  PRIMARY KEY (provider_id, auth_method_id)
-);
-
-CREATE TABLE IF NOT EXISTS provider_oauth_configs (
-  provider_id TEXT PRIMARY KEY REFERENCES providers(id) ON DELETE CASCADE,
-  authorize_url TEXT NOT NULL,
-  token_url TEXT NOT NULL,
-  callback_url TEXT NOT NULL,
-  access_type TEXT NOT NULL,
-  scope TEXT,
-  client_id TEXT,
-  app_secret_id TEXT
-);
-`;
+export const getDefaultCatalogDbPath = getDefaultCatalogDataPath;
+export const defaultCatalogDbPath = getDefaultCatalogDataPath();
 
 const seedProviders = [
   {
@@ -675,6 +613,29 @@ const seedProviders = [
     ]
   },
   {
+    id: 'nvidia',
+    name: 'NVIDIA NIM',
+    vendor: 'NVIDIA',
+    description: 'Modelos NVIDIA NIM servidos por el endpoint OpenAI-compatible de NVIDIA API Catalog. Claude Code se conecta a traves del gateway local para mantener compatibilidad Anthropic, herramientas y vision cuando el modelo lo soporta.',
+    docsUrl: 'https://docs.api.nvidia.com/nim/reference/moonshotai-kimi-k2-5',
+    docsVerifiedAt: '2026-04-15',
+    baseUrl: 'https://integrate.api.nvidia.com/v1',
+    defaultModelId: null,
+    defaultAuthMethodId: 'token',
+    defaultApiKeyEnvVar: 'NVIDIA_API_KEY',
+    models: [],
+    authMethods: [
+      {
+        id: 'token',
+        name: 'Token',
+        description: 'Conexion por NVIDIA_API_KEY contra el endpoint OpenAI-compatible de NVIDIA API Catalog.',
+        credentialKind: 'env_var',
+        sortOrder: 1,
+        isDefault: 1
+      }
+    ]
+  },
+  {
     id: 'openai',
     name: 'OpenAI',
     vendor: 'OpenAI',
@@ -883,6 +844,45 @@ const seedProviders = [
     ]
   },
   {
+    id: 's-kaiba',
+    name: 'Seto Kaiba',
+    vendor: 'Claude Connect',
+    description: 'Router virtual de Claude Connect que usa conexiones gratuitas ya configuradas y rota automaticamente entre ellas cuando encuentra cuota o rate limit.',
+    docsUrl: '',
+    docsVerifiedAt: '2026-04-08',
+    baseUrl: 'claude-connect://s-kaiba',
+    defaultModelId: 's-kaiba',
+    defaultAuthMethodId: 'anonymous',
+    defaultApiKeyEnvVar: '',
+    models: [
+      {
+        id: 's-kaiba',
+        name: 'Seto Kaiba',
+        category: 'Router Virtual',
+        contextWindow: 'Auto',
+        summary: 'Modelo virtual que prioriza conexiones gratuitas configuradas y hace failover local cuando un proveedor agota cuota o rate limit.',
+        upstreamModelId: 's-kaiba',
+        transportMode: 'gateway',
+        apiStyle: 'router-free',
+        apiBaseUrl: 'claude-connect://s-kaiba',
+        apiPath: '/router/free',
+        authEnvMode: 'auth_token',
+        sortOrder: 1,
+        isDefault: 1
+      }
+    ],
+    authMethods: [
+      {
+        id: 'anonymous',
+        name: 'Automatico',
+        description: 'Usa el router local de Claude Connect y las conexiones gratuitas ya configuradas.',
+        credentialKind: 'none',
+        sortOrder: 1,
+        isDefault: 1
+      }
+    ]
+  },
+  {
     id: 'qwen',
     name: 'Qwen',
     vendor: 'Qwen',
@@ -940,334 +940,123 @@ const seedProviders = [
   }
 ];
 
-function seedCatalog(db) {
-  const insertProvider = db.prepare(`
-    INSERT INTO providers (
-      id, name, vendor, description, docs_url, docs_verified_at, base_url,
-      default_model_id, default_auth_method_id, default_api_key_env_var
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET
-      name = excluded.name,
-      vendor = excluded.vendor,
-      description = excluded.description,
-      docs_url = excluded.docs_url,
-      docs_verified_at = excluded.docs_verified_at,
-      base_url = excluded.base_url,
-      default_model_id = excluded.default_model_id,
-      default_auth_method_id = excluded.default_auth_method_id,
-      default_api_key_env_var = excluded.default_api_key_env_var
-  `);
+export function createCatalogStore({ filename = getDefaultCatalogDataPath() } = {}) {
+  const providers = seedProviders.map((provider) => structuredClone(provider));
 
-  const insertModel = db.prepare(`
-    INSERT INTO models (
-      id, provider_id, name, category, context_window, summary,
-      upstream_model_id,
-      transport_mode, api_style, api_base_url, api_path, auth_env_mode, supports_vision,
-      sort_order, is_default
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET
-      provider_id = excluded.provider_id,
-      name = excluded.name,
-      category = excluded.category,
-      context_window = excluded.context_window,
-      summary = excluded.summary,
-      upstream_model_id = excluded.upstream_model_id,
-      transport_mode = excluded.transport_mode,
-      api_style = excluded.api_style,
-      api_base_url = excluded.api_base_url,
-      api_path = excluded.api_path,
-      auth_env_mode = excluded.auth_env_mode,
-      supports_vision = excluded.supports_vision,
-      sort_order = excluded.sort_order,
-      is_default = excluded.is_default
-  `);
-
-  const insertAuthMethod = db.prepare(`
-    INSERT INTO auth_methods (id, name, description, credential_kind)
-    VALUES (?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET
-      name = excluded.name,
-      description = excluded.description,
-      credential_kind = excluded.credential_kind
-  `);
-
-  const insertProviderAuthMethod = db.prepare(`
-    INSERT INTO provider_auth_methods (provider_id, auth_method_id, sort_order, is_default)
-    VALUES (?, ?, ?, ?)
-    ON CONFLICT(provider_id, auth_method_id) DO UPDATE SET
-      sort_order = excluded.sort_order,
-      is_default = excluded.is_default
-  `);
-
-  const insertOAuthConfig = db.prepare(`
-    INSERT INTO provider_oauth_configs (
-      provider_id, authorize_url, token_url, callback_url, access_type, scope, client_id, app_secret_id
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(provider_id) DO UPDATE SET
-      authorize_url = excluded.authorize_url,
-      token_url = excluded.token_url,
-      callback_url = excluded.callback_url,
-      access_type = excluded.access_type,
-      scope = excluded.scope,
-      client_id = excluded.client_id,
-      app_secret_id = excluded.app_secret_id
-  `);
-
-  db.exec('BEGIN');
-
-  try {
-    for (const seedProvider of seedProviders) {
-      db.prepare('DELETE FROM models WHERE provider_id = ?').run(seedProvider.id);
-      db.prepare('DELETE FROM provider_auth_methods WHERE provider_id = ?').run(seedProvider.id);
-
-      insertProvider.run(
-        seedProvider.id,
-        seedProvider.name,
-        seedProvider.vendor,
-        seedProvider.description,
-        seedProvider.docsUrl,
-        seedProvider.docsVerifiedAt,
-        seedProvider.baseUrl,
-        seedProvider.defaultModelId,
-        seedProvider.defaultAuthMethodId,
-        seedProvider.defaultApiKeyEnvVar
-      );
-
-      for (const model of seedProvider.models) {
-        insertModel.run(
-          model.id,
-          seedProvider.id,
-          model.name,
-          model.category,
-          model.contextWindow,
-          model.summary,
-          model.upstreamModelId ?? model.id,
-          model.transportMode ?? 'gateway',
-          model.apiStyle ?? 'openai-chat',
-          model.apiBaseUrl ?? null,
-          model.apiPath ?? null,
-          model.authEnvMode ?? 'auth_token',
-          model.supportsVision === false ? 0 : 1,
-          model.sortOrder,
-          model.isDefault
-        );
+  const findProvider = (providerId) => providers.find((provider) => provider.id === providerId) ?? null;
+  const mapProvider = (provider) => ({
+    id: provider.id,
+    name: provider.name,
+    vendor: provider.vendor,
+    description: provider.description,
+    docsUrl: provider.docsUrl,
+    docsVerifiedAt: provider.docsVerifiedAt,
+    baseUrl: provider.baseUrl,
+    defaultModelId: provider.defaultModelId,
+    defaultAuthMethodId: provider.defaultAuthMethodId,
+    defaultApiKeyEnvVar: provider.defaultApiKeyEnvVar,
+    modelCount: provider.models.length,
+    authCount: provider.authMethods.length
+  });
+  const mapModel = (provider, model) => ({
+    id: model.id,
+    providerId: provider.id,
+    name: model.name,
+    category: model.category,
+    contextWindow: model.contextWindow,
+    summary: model.summary,
+    upstreamModelId: model.upstreamModelId ?? model.id,
+    transportMode: model.transportMode ?? 'gateway',
+    apiStyle: model.apiStyle ?? 'openai-chat',
+    apiBaseUrl: model.apiBaseUrl ?? null,
+    apiPath: model.apiPath ?? null,
+    authEnvMode: model.authEnvMode ?? 'auth_token',
+    supportsVision: model.supportsVision !== false,
+    supportsAnonymous: model.supportsAnonymous ?? false,
+    isFreeTier: model.isFreeTier ?? false,
+    sortOrder: Number(model.sortOrder ?? 0),
+    isDefault: Boolean(model.isDefault)
+  });
+  const mapAuthMethod = (authMethod) => ({
+    id: authMethod.id,
+    name: authMethod.name,
+    description: authMethod.description,
+    credentialKind: authMethod.credentialKind,
+    sortOrder: Number(authMethod.sortOrder ?? 0),
+    isDefault: Boolean(authMethod.isDefault)
+  });
+  const mapOAuth = (provider) => provider.oauth
+    ? {
+        providerId: provider.id,
+        deviceCodeUrl: provider.oauth.authorizeUrl,
+        tokenUrl: provider.oauth.tokenUrl,
+        browserAuthUrl: provider.oauth.callbackUrl,
+        flowType: provider.oauth.accessType,
+        scope: provider.oauth.scope ?? '',
+        clientId: provider.oauth.clientId ?? '',
+        appSecretId: provider.oauth.appSecretId ?? ''
       }
-
-      for (const authMethod of seedProvider.authMethods) {
-        insertAuthMethod.run(
-          authMethod.id,
-          authMethod.name,
-          authMethod.description,
-          authMethod.credentialKind
-        );
-
-        insertProviderAuthMethod.run(
-          seedProvider.id,
-          authMethod.id,
-          authMethod.sortOrder,
-          authMethod.isDefault
-        );
-      }
-
-      if (seedProvider.oauth) {
-        insertOAuthConfig.run(
-          seedProvider.id,
-          seedProvider.oauth.authorizeUrl,
-          seedProvider.oauth.tokenUrl,
-          seedProvider.oauth.callbackUrl,
-          seedProvider.oauth.accessType,
-          seedProvider.oauth.scope,
-          seedProvider.oauth.clientId,
-          seedProvider.oauth.appSecretId
-        );
-      } else {
-        db.prepare('DELETE FROM provider_oauth_configs WHERE provider_id = ?').run(seedProvider.id);
-      }
-    }
-
-    db.exec('COMMIT');
-  } catch (error) {
-    db.exec('ROLLBACK');
-    throw error;
-  }
-}
-
-function ensureSchemaMigrations(db) {
-  const modelColumns = new Set(
-    db.prepare('PRAGMA table_info(models)').all().map((column) => column.name)
-  );
-
-  const alterStatements = [];
-
-  if (!modelColumns.has('transport_mode')) {
-    alterStatements.push(`ALTER TABLE models ADD COLUMN transport_mode TEXT NOT NULL DEFAULT 'gateway'`);
-  }
-
-  if (!modelColumns.has('api_style')) {
-    alterStatements.push(`ALTER TABLE models ADD COLUMN api_style TEXT NOT NULL DEFAULT 'openai-chat'`);
-  }
-
-  if (!modelColumns.has('api_base_url')) {
-    alterStatements.push(`ALTER TABLE models ADD COLUMN api_base_url TEXT`);
-  }
-
-  if (!modelColumns.has('api_path')) {
-    alterStatements.push(`ALTER TABLE models ADD COLUMN api_path TEXT`);
-  }
-
-  if (!modelColumns.has('auth_env_mode')) {
-    alterStatements.push(`ALTER TABLE models ADD COLUMN auth_env_mode TEXT NOT NULL DEFAULT 'auth_token'`);
-  }
-
-  if (!modelColumns.has('supports_vision')) {
-    alterStatements.push(`ALTER TABLE models ADD COLUMN supports_vision INTEGER NOT NULL DEFAULT 1`);
-  }
-
-  if (!modelColumns.has('upstream_model_id')) {
-    alterStatements.push(`ALTER TABLE models ADD COLUMN upstream_model_id TEXT`);
-  }
-
-  for (const statement of alterStatements) {
-    db.exec(statement);
-  }
-
-  db.exec(`UPDATE models SET upstream_model_id = id WHERE upstream_model_id IS NULL OR upstream_model_id = ''`);
-}
-
-function mapProviderRow(row) {
-  return {
-    id: row.id,
-    name: row.name,
-    vendor: row.vendor,
-    description: row.description,
-    docsUrl: row.docs_url,
-    docsVerifiedAt: row.docs_verified_at,
-    baseUrl: row.base_url,
-    defaultModelId: row.default_model_id,
-    defaultAuthMethodId: row.default_auth_method_id,
-    defaultApiKeyEnvVar: row.default_api_key_env_var,
-    modelCount: Number(row.model_count ?? 0),
-    authCount: Number(row.auth_count ?? 0)
-  };
-}
-
-function mapModelRow(row) {
-  return {
-    id: row.id,
-    providerId: row.provider_id,
-    name: row.name,
-    category: row.category,
-    contextWindow: row.context_window,
-    summary: row.summary,
-    upstreamModelId: row.upstream_model_id ?? row.id,
-    transportMode: row.transport_mode,
-    apiStyle: row.api_style,
-    apiBaseUrl: row.api_base_url,
-    apiPath: row.api_path,
-    authEnvMode: row.auth_env_mode,
-    supportsVision: Boolean(row.supports_vision),
-    sortOrder: Number(row.sort_order),
-    isDefault: Boolean(row.is_default)
-  };
-}
-
-function mapAuthRow(row) {
-  return {
-    id: row.id,
-    name: row.name,
-    description: row.description,
-    credentialKind: row.credential_kind,
-    sortOrder: Number(row.sort_order),
-    isDefault: Boolean(row.is_default)
-  };
-}
-
-function mapOAuthRow(row) {
-  return {
-    providerId: row.provider_id,
-    deviceCodeUrl: row.authorize_url,
-    tokenUrl: row.token_url,
-    browserAuthUrl: row.callback_url,
-    flowType: row.access_type,
-    scope: row.scope ?? '',
-    clientId: row.client_id ?? '',
-    appSecretId: row.app_secret_id ?? ''
-  };
-}
-
-export function createCatalogStore({ filename = getDefaultCatalogDbPath() } = {}) {
-  if (filename !== ':memory:') {
-    fs.mkdirSync(path.dirname(filename), { recursive: true });
-  }
-
-  const db = new DatabaseSync(filename);
-  db.exec(schemaSql);
-  ensureSchemaMigrations(db);
-  seedCatalog(db);
-
-  const providerListStatement = db.prepare(`
-    SELECT
-      p.*,
-      COUNT(DISTINCT m.id) AS model_count,
-      COUNT(DISTINCT pam.auth_method_id) AS auth_count
-    FROM providers p
-    LEFT JOIN models m ON m.provider_id = p.id
-    LEFT JOIN provider_auth_methods pam ON pam.provider_id = p.id
-    GROUP BY p.id
-    ORDER BY p.name ASC
-  `);
-
-  const providerStatement = db.prepare(`
-    SELECT *
-    FROM providers
-    WHERE id = ?
-  `);
-
-  const modelListStatement = db.prepare(`
-    SELECT *
-    FROM models
-    WHERE provider_id = ?
-    ORDER BY is_default DESC, sort_order ASC, name ASC
-  `);
-
-  const authListStatement = db.prepare(`
-    SELECT am.*, pam.sort_order, pam.is_default
-    FROM provider_auth_methods pam
-    JOIN auth_methods am ON am.id = pam.auth_method_id
-    WHERE pam.provider_id = ?
-    ORDER BY pam.is_default DESC, pam.sort_order ASC, am.name ASC
-  `);
-
-  const oauthConfigStatement = db.prepare(`
-    SELECT *
-    FROM provider_oauth_configs
-    WHERE provider_id = ?
-  `);
+    : null;
 
   return {
     filename,
     close() {
-      db.close();
+      // Catalog data is generated from seeds, so there is no native handle to close.
     },
     getProviders() {
-      return providerListStatement.all().map(mapProviderRow);
+      return providers
+        .map(mapProvider)
+        .sort((left, right) => left.name.localeCompare(right.name));
     },
     getProviderById(providerId) {
-      const row = providerStatement.get(providerId);
-      return row ? mapProviderRow(row) : null;
+      const provider = findProvider(providerId);
+      return provider ? mapProvider(provider) : null;
     },
     getModelsByProviderId(providerId) {
-      return modelListStatement.all(providerId).map(mapModelRow);
+      const provider = findProvider(providerId);
+
+      if (!provider) {
+        return [];
+      }
+
+      return provider.models
+        .map((model) => mapModel(provider, model))
+        .sort((left, right) => {
+          if (left.isDefault !== right.isDefault) {
+            return left.isDefault ? -1 : 1;
+          }
+
+          if (left.sortOrder !== right.sortOrder) {
+            return left.sortOrder - right.sortOrder;
+          }
+
+          return left.name.localeCompare(right.name);
+        });
     },
     getAuthMethodsByProviderId(providerId) {
-      return authListStatement.all(providerId).map(mapAuthRow);
+      const provider = findProvider(providerId);
+
+      if (!provider) {
+        return [];
+      }
+
+      return provider.authMethods
+        .map(mapAuthMethod)
+        .sort((left, right) => {
+          if (left.isDefault !== right.isDefault) {
+            return left.isDefault ? -1 : 1;
+          }
+
+          if (left.sortOrder !== right.sortOrder) {
+            return left.sortOrder - right.sortOrder;
+          }
+
+          return left.name.localeCompare(right.name);
+        });
     },
     getOAuthConfigByProviderId(providerId) {
-      const row = oauthConfigStatement.get(providerId);
-      return row ? mapOAuthRow(row) : null;
+      const provider = findProvider(providerId);
+      return provider ? mapOAuth(provider) : null;
     },
     getProviderCatalog(providerId) {
       const provider = this.getProviderById(providerId);

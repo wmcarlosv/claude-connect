@@ -4,11 +4,12 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import process from 'node:process';
 
+const scriptPath = fileURLToPath(import.meta.url);
+const hasNoWarningsFlag = process.execArgv.includes('--no-warnings');
 const alreadyRestarted = process.env.CLAUDE_CONNECT_NO_WARNINGS === '1';
 
-if (!alreadyRestarted && !process.execArgv.includes('--no-warnings=ExperimentalWarning')) {
-  const scriptPath = fileURLToPath(import.meta.url);
-  const child = spawn(process.execPath, ['--no-warnings=ExperimentalWarning', scriptPath, ...process.argv.slice(2)], {
+if (!alreadyRestarted && !hasNoWarningsFlag) {
+  const child = spawn(process.execPath, ['--no-warnings', scriptPath, ...process.argv.slice(2)], {
     env: {
       ...process.env,
       CLAUDE_CONNECT_NO_WARNINGS: '1'

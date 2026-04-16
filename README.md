@@ -1,11 +1,11 @@
 # Claude Connect
 
-> Conecta `Claude Code` con `OpenCode Go`, `Zen`, `Kimi`, `DeepSeek`, `Z.AI`, `Kilo Code Models`, `Ollama`, `Ollama Cloud Models`, `OpenAI`, `Inception Labs`, `OpenRouter` y `Qwen` desde una interfaz de consola clara, rápida y reversible.
+> Conecta `Claude Code` con `OpenCode Go`, `Zen`, `Kimi`, `DeepSeek`, `Z.AI`, `Kilo Code Models`, `Ollama`, `Ollama Cloud Models`, `NVIDIA NIM`, `OpenAI`, `Inception Labs`, `OpenRouter`, `Seto Kaiba` y `Qwen` desde una interfaz de consola clara, rápida y reversible.
 
 [![npm version](https://img.shields.io/npm/v/claude-connect?style=for-the-badge&logo=npm&color=cb3837)](https://www.npmjs.com/package/claude-connect)
-[![node](https://img.shields.io/badge/node-%3E%3D22-2f7d32?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
+[![node](https://img.shields.io/badge/node-%3E%3D18-2f7d32?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![license](https://img.shields.io/badge/license-MIT-0f172a?style=for-the-badge)](./LICENSE)
-[![providers](https://img.shields.io/badge/providers-OpenCode%20Go%20%7C%20Zen%20%7C%20Kimi%20%7C%20DeepSeek%20%7C%20Z.AI%20%7C%20Kilo%20Code%20Models%20%7C%20Ollama%20%7C%20Ollama%20Cloud%20Models%20%7C%20OpenAI%20%7C%20Inception%20Labs%20%7C%20OpenRouter%20%7C%20Qwen-0ea5e9?style=for-the-badge)](https://www.npmjs.com/package/claude-connect)
+[![providers](https://img.shields.io/badge/providers-OpenCode%20Go%20%7C%20Zen%20%7C%20Kimi%20%7C%20DeepSeek%20%7C%20Z.AI%20%7C%20Kilo%20Code%20Models%20%7C%20Ollama%20%7C%20Ollama%20Cloud%20Models%20%7C%20NVIDIA%20NIM%20%7C%20OpenAI%20%7C%20Inception%20Labs%20%7C%20OpenRouter%20%7C%20Seto%20Kaiba%20%7C%20Qwen-0ea5e9?style=for-the-badge)](https://www.npmjs.com/package/claude-connect)
 
 <p align="center">
   <img src="./ezgif-871b2bc9267494c5.gif" alt="Claude Connect demo" width="980" />
@@ -17,14 +17,14 @@
 
 ### Highlights
 
-- `OpenCode Go`, `Zen`, `Kimi`, `DeepSeek`, `Z.AI`, `Kilo Code Models`, `Ollama`, `Ollama Cloud Models`, `OpenAI`, `Inception Labs`, `OpenRouter` y `Qwen` listos desde el primer arranque
+- `OpenCode Go`, `Zen`, `Kimi`, `DeepSeek`, `Z.AI`, `Kilo Code Models`, `Ollama`, `Ollama Cloud Models`, `NVIDIA NIM`, `OpenAI`, `Inception Labs`, `OpenRouter`, `Seto Kaiba` y `Qwen` listos desde el primer arranque
 - soporte para `Token` y `OAuth` cuando el proveedor lo permite
 - API keys compartidas por proveedor para no repetir el mismo token en cada modelo
 - activación reversible sobre la instalación real de `Claude Code`
 - limpieza automática del conflicto entre `claude.ai` y `ANTHROPIC_API_KEY`
 - gateway local Anthropic-compatible para `Qwen`
 - detección automática de rutas en Linux y Windows
-- catálogo local en SQLite generado automáticamente
+- catálogo local generado desde seeds, sin dependencias nativas
 - interfaz de consola con navegación simple y profesional
 - listas largas paginadas de `5 en 5` para que la UI no se rompa con catálogos grandes
 
@@ -62,7 +62,7 @@ npm start
 
 Requisito:
 
-- `Node.js 22` o superior
+- `Node.js 18` o superior
 
 ## Quick Flow
 
@@ -87,9 +87,11 @@ Al activar:
 - `Kilo Code Models` consulta `https://api.kilo.ai/api/gateway/models`, lista modelos gratis y pagos, y usa `https://api.kilo.ai/api/gateway/chat/completions`
 - `Ollama` pide una URL local o remota, valida `/api/tags` y usa el gateway local sobre `.../api/chat`
 - `Ollama Cloud Models` consulta `https://ollama.com/api/tags` con `OLLAMA_API_KEY`, usa los modelos que realmente devuelve tu cuenta y trabaja sobre `https://ollama.com/api/chat`
+- `NVIDIA NIM` consulta `https://integrate.api.nvidia.com/v1/models`, filtra modelos de coding y usa `https://integrate.api.nvidia.com/v1/chat/completions`
 - `OpenAI` usa el gateway local sobre `https://api.openai.com/v1/chat/completions`
 - `Inception Labs` usa el gateway local sobre `https://api.inceptionlabs.ai/v1/chat/completions`
-- `OpenRouter` usa `openrouter/free` por gateway sobre `https://openrouter.ai/api/v1`
+- `OpenRouter` usa `openrouter/free` y modelos `:free` descubiertos desde `https://openrouter.ai/api/v1/models`
+- `Seto Kaiba` usa el gateway local como router virtual y rota entre conexiones gratuitas ya configuradas cuando encuentra cuota o rate limit
 - `Qwen` apunta al gateway local `http://127.0.0.1:4310/anthropic`
 - para algunos modelos con limites conocidos, el gateway ahora ajusta `max_tokens` y bloquea prompts sobredimensionados antes de que el upstream devuelva errores opacos
 - para `Inception Labs`, el gateway tambien respeta un presupuesto local de input tokens por minuto para reducir errores de `Rate limit reached`
@@ -106,9 +108,11 @@ Al activar:
 | `Kilo Code Models` | modelos gratis y pagos descubiertos desde `/models` | `Gratis sin token`, `Token` | Gateway local |
 | `Ollama` | modelos descubiertos desde tu servidor | `Servidor Ollama` | Gateway local |
 | `Ollama Cloud Models` | modelos cloud descubiertos desde `ollama.com/api/tags` | `Token` | Gateway local |
+| `NVIDIA NIM` | modelos de coding descubiertos desde `/models` | `Token` | Gateway local |
 | `OpenAI` | `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.3-codex`, `gpt-5.2-codex`, `gpt-5.2`, `gpt-5.1-codex-max`, `gpt-5.1-codex-mini` | `Token` | Gateway local |
 | `Inception Labs` | `mercury-2` | `Token` | Gateway local |
-| `OpenRouter` | `openrouter/free` | `Token` | Gateway local |
+| `OpenRouter` | `openrouter/free` + modelos `:free` descubiertos en vivo | `Token` | Gateway local |
+| `Seto Kaiba` | `s-kaiba` | `Automatico` | Gateway local |
 | `Qwen` | `qwen3-coder-plus` | `OAuth`, `Token` | Gateway local |
 
 Nota sobre `OpenCode Go`:
@@ -195,6 +199,32 @@ Nota sobre `Ollama Cloud Models`:
   - https://docs.ollama.com/api/authentication
   - https://docs.ollama.com/api/tags
 
+Nota sobre `NVIDIA NIM`:
+
+- usa `https://integrate.api.nvidia.com/v1/chat/completions` con `NVIDIA_API_KEY`
+- la selección de modelos es dinámica: Claude Connect consulta `GET https://integrate.api.nvidia.com/v1/models`
+- solo muestra modelos orientados a programación según señales como `coder`, `code`, `devstral`, `kimi`, `deepseek`, `minimax`, `nemotron`, `qwen`, `glm` y `gpt-oss`
+- `moonshotai/kimi-k2.5` se detecta como modelo multimodal con ventana `256K` según la documentación de NVIDIA
+- Claude Connect lo trata como proveedor `OpenAI-compatible` por gateway local, por lo que Claude Code sigue usando la interfaz Anthropic local
+- para `moonshotai/kimi-k2.5`, el gateway agrega `chat_template_kwargs.thinking=true` y aplica presupuesto preventivo de contexto `256K`
+- referencias oficiales:
+  - https://docs.api.nvidia.com/nim/reference/moonshotai-kimi-k2-5
+
+Nota sobre `Seto Kaiba`:
+
+- es un proveedor virtual de `Claude Connect`, no un upstream externo
+- al crearlo, eliges exactamente qué conexiones gratuitas quieres usar
+- solo admite perfiles que pasan por nuestro gateway local, no conexiones directas
+- si el proveedor actual devuelve errores de cuota, creditos agotados o rate limit, intenta la siguiente conexión gratuita compatible
+- no rota en errores de validación ni a mitad de una respuesta
+- sirve para exprimir proveedores free sin tener que ir cambiando de perfil manualmente
+
+Nota sobre `OpenRouter`:
+
+- la app mantiene `openrouter/free` como router estable del catálogo base
+- además consulta `GET https://openrouter.ai/api/v1/models` para listar variantes `:free` y otros modelos con pricing `0`
+- si la consulta en vivo falla, sigue quedando disponible `openrouter/free`
+
 ## What It Stores
 
 Claude Connect guarda el estado sensible fuera del repo.
@@ -214,18 +244,11 @@ Ahí viven:
 - estado del switch de Claude
 - logs y estado del gateway
 
-El catálogo SQLite local se genera automáticamente en:
+Importante sobre el catálogo:
 
-```text
-Linux: ~/.claude-connect/storage/claude-connect.sqlite
-Windows: %APPDATA%\claude-connect\storage\claude-connect.sqlite
-```
-
-Importante:
-
-- esa base ya no se versiona en git
 - el catálogo se siembra desde `src/data/catalog-store.js`
-- ya no se crea en la carpeta donde ejecutas el comando
+- no depende de `node:sqlite`, por eso funciona desde `Node.js 18`
+- no crea una base de datos en la carpeta donde ejecutas el comando
 - esto evita conflictos molestos al hacer `git pull` y carpetas `storage/` accidentales en proyectos ajenos
 
 ## Claude Code Switching

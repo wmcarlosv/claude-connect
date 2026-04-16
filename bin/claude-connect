@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-exec node --no-warnings=ExperimentalWarning "$SCRIPT_DIR/claude-connect.js" "$@"
+exec node --no-warnings "$SCRIPT_DIR/claude-connect.js" "$@"

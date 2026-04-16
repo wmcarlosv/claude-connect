@@ -23,8 +23,11 @@ import {
   saveManagedProviderTokenSecret
 } from './lib/secrets.js';
 import { fetchKiloModels } from './lib/kilo.js';
+import { fetchNvidiaCodingModels } from './lib/nvidia.js';
+import { fetchOpenRouterFreeModels } from './lib/openrouter.js';
 import { fetchOllamaCloudModels } from './lib/ollama-cloud.js';
 import { fetchOllamaModels, normalizeOllamaBaseUrl } from './lib/ollama.js';
+import { isSKaibaSelectableProfile } from './lib/s-kaiba.js';
 import {
   assertInteractiveTerminal,
   buildFrame,
@@ -104,7 +107,7 @@ function mainMenuItems() {
     },
     {
       label: 'Ver catalogo',
-      description: 'Consulta proveedores, modelos y autenticacion desde SQLite.',
+      description: 'Consulta proveedores, modelos y autenticacion desde el catalogo local.',
       value: 'catalog'
     },
     {
@@ -145,6 +148,21 @@ function profileItems(profiles) {
     description: `${profile.provider.name} · ${profile.model.name} · ${profile.auth.method}`,
     value: profile
   }));
+}
+
+function sKaibaCandidateItems(profiles, selectedPaths) {
+  return profiles.map((profile) => {
+    const selected = selectedPaths.has(profile.filePath);
+
+    return {
+      label: `${selected ? '[x]' : '[ ]'} ${profile.profileName}`,
+      description: `${profile.provider.name} · ${profile.model.name} · ${profile.auth.method}`,
+      value: {
+        kind: 'profile',
+        profile
+      }
+    };
+  });
 }
 
 async function attachProviderCredentialMetadata(profiles) {
@@ -230,6 +248,95 @@ function renderInfoScreen({ title, subtitle, lines, footer }) {
   );
 }
 
+async function selectSKaibaConnections() {
+  const profiles = await attachProviderCredentialMetadata(await listProfiles());
+  const candidates = profiles
+    .filter((profile) => isSKaibaSelectableProfile(profile))
+    .sort((left, right) => left.profileName.localeCompare(right.profileName));
+
+  if (candidates.length === 0) {
+    renderInfoScreen({
+      title: 'Sin conexiones compatibles',
+      subtitle: 'Seto Kaiba necesita perfiles gratuitos que usen el gateway local de Claude Connect.',
+      lines: [
+        colorize('Crea primero perfiles free compatibles, por ejemplo OpenRouter free, Kilo free o modelos free equivalentes servidos por nuestro bridge.', colors.soft)
+      ],
+      footer: 'Presiona una tecla para volver'
+    });
+
+    const result = await waitForAnyKey();
+    return result;
+  }
+
+  const selectedPaths = new Set();
+
+  while (true) {
+    const selectedNames = candidates
+      .filter((profile) => selectedPaths.has(profile.filePath))
+      .map((profile) => profile.profileName);
+    const choice = await selectFromList({
+      step: 3,
+      totalSteps: 3,
+      title: 'Conexiones para Seto Kaiba',
+      subtitle: selectedPaths.size === 0
+        ? 'Marca las conexiones gratuitas compatibles que quieres rotar. Enter alterna una seleccion.'
+        : `Seleccionadas: ${selectedNames.join(', ')}`,
+      items: [
+        ...sKaibaCandidateItems(candidates, selectedPaths),
+        {
+          label: 'Continuar',
+          description: selectedPaths.size === 0
+            ? 'Selecciona al menos una conexion antes de continuar.'
+            : 'Guardar Seto Kaiba con las conexiones marcadas.',
+          value: {
+            kind: 'done'
+          }
+        }
+      ],
+      allowBack: true,
+      detailBuilder: (selected) => {
+        if (selected.value.kind === 'done') {
+          return selectedPaths.size === 0
+            ? ['Debes seleccionar al menos una conexion compatible.']
+            : ['Claude Connect usara solo las conexiones marcadas para hacer failover.'];
+        }
+
+        const profile = selected.value.profile;
+        return [
+          `Perfil: ${profile.profileName}`,
+          `Proveedor: ${profile.provider.name}`,
+          `Modelo: ${profile.model.name}`,
+          `Auth: ${profile.auth.method}`,
+          `Modo: ${profile.model.transportMode}/${profile.model.apiStyle}`,
+          selectedPaths.has(profile.filePath)
+            ? 'Estado: seleccionado'
+            : 'Estado: disponible'
+        ];
+      }
+    });
+
+    if (isExit(choice) || isBack(choice)) {
+      return choice;
+    }
+
+    if (choice.kind === 'done') {
+      if (selectedPaths.size === 0) {
+        continue;
+      }
+
+      return candidates.filter((profile) => selectedPaths.has(profile.filePath));
+    }
+
+    const filePath = choice.profile.filePath;
+
+    if (selectedPaths.has(filePath)) {
+      selectedPaths.delete(filePath);
+    } else {
+      selectedPaths.add(filePath);
+    }
+  }
+}
+
 function buildExternalConflictLines(conflicts) {
   if (!Array.isArray(conflicts) || conflicts.length === 0) {
     return [];
@@ -248,7 +355,7 @@ function renderWelcome() {
     buildFrame({
       eyebrow: 'CLAUDE CONNECT',
       title: 'Conecta Claude Code con otros modelos',
-      subtitle: 'Flujo guiado, catalogo SQLite y perfiles locales listos para reutilizar.',
+      subtitle: 'Flujo guiado, catalogo local y perfiles listos para reutilizar.',
       body: [
         ...buildBrandWordmark(),
         '',
@@ -259,7 +366,7 @@ function renderWelcome() {
         colorize('4. Guardar perfil y credenciales locales', colors.soft),
         '',
         colorize('Catalogo actual', colors.bold, colors.accentSoft),
-        colorize('OpenCode Go, Zen, Kimi, DeepSeek, Z.AI, Ollama, OpenAI, Inception Labs, OpenRouter y Qwen ya vienen almacenados en SQLite.', colors.soft),
+        colorize('OpenCode Go, Zen, Kimi, DeepSeek, Z.AI, Ollama, NVIDIA NIM, OpenAI, Inception Labs, OpenRouter, Seto Kaiba y Qwen ya vienen en el catalogo local.', colors.soft),
         '',
         colorize('Seguridad', colors.bold, colors.accentSoft),
         colorize('El token OAuth se guarda localmente y el modo Token puede guardarse una sola vez por proveedor.', colors.soft)
@@ -284,6 +391,13 @@ function renderSummary({ profile, filePath }) {
     : profile.auth.method !== 'oauth'
       ? colorize(`API key no guardada localmente. Si existe ${profile.auth.envVar}, tambien se usara.`, colors.soft)
       : null;
+  const routerSummary = profile.provider.id === 's-kaiba' && Array.isArray(profile.router?.candidateProfileNames)
+    ? [
+        '',
+        colorize('Conexiones seleccionadas para rotacion', colors.bold, colors.accentSoft),
+        ...profile.router.candidateProfileNames.map((name) => colorize(name, colors.soft))
+      ]
+    : [];
 
   renderScreen(
     buildFrame({
@@ -298,6 +412,7 @@ function renderSummary({ profile, filePath }) {
         colorize(`Base URL: ${profile.endpoint.baseUrl}`, colors.soft),
         colorize(authSummary, colors.soft),
         ...(managedSecretSummary ? [managedSecretSummary] : []),
+        ...routerSummary,
         '',
         colorize('Archivo generado', colors.bold, colors.accentSoft),
         colorize(filePath, colors.soft),
@@ -333,7 +448,7 @@ async function showCatalog(store) {
     step: 1,
     totalSteps: 1,
     title: 'Catalogo de proveedores',
-    subtitle: 'Todo lo que ves aqui sale directamente de SQLite.',
+    subtitle: 'Todo lo que ves aqui sale del catalogo local de Claude Connect.',
     items: providerItems(providers),
     detailBuilder: (selected) => [
       `Base URL: ${selected.value.baseUrl}`,
@@ -366,6 +481,21 @@ async function showCatalog(store) {
     }
   }
 
+  if (catalog.id === 'openrouter') {
+    try {
+      const discovered = await fetchOpenRouterFreeModels();
+      modelLines = discovered.models.length > 0
+        ? discovered.models.map((model) => colorize(`${model.name} · ${model.summary}`, colors.soft))
+        : [colorize('No se encontraron modelos free utilizables en vivo para OpenRouter en este momento.', colors.warning)];
+    } catch (error) {
+      modelLines = [
+        colorize('No se pudieron cargar los modelos free de OpenRouter en vivo.', colors.warning),
+        colorize('Se mantiene disponible el router openrouter/free del catalogo base.', colors.soft),
+        colorize(error instanceof Error ? error.message : String(error), colors.soft)
+      ];
+    }
+  }
+
   if (catalog.id === 'ollama-cloud') {
     const providerSecret = await readManagedProviderTokenSecret(catalog.id);
     const token = typeof providerSecret?.secret?.token === 'string' ? providerSecret.secret.token.trim() : '';
@@ -383,6 +513,29 @@ async function showCatalog(store) {
       } catch (error) {
         modelLines = [
           colorize('No se pudieron cargar los modelos de Ollama Cloud en vivo.', colors.warning),
+          colorize(error instanceof Error ? error.message : String(error), colors.soft)
+        ];
+      }
+    }
+  }
+
+  if (catalog.id === 'nvidia') {
+    const providerSecret = await readManagedProviderTokenSecret(catalog.id);
+    const token = typeof providerSecret?.secret?.token === 'string' ? providerSecret.secret.token.trim() : '';
+
+    if (token.length === 0) {
+      modelLines = [
+        colorize('Guarda primero NVIDIA_API_KEY en una conexion de NVIDIA NIM para listar modelos de coding en vivo.', colors.warning)
+      ];
+    } else {
+      try {
+        const discovered = await fetchNvidiaCodingModels({ apiKey: token });
+        modelLines = discovered.models.length > 0
+          ? discovered.models.map((model) => colorize(`${model.name} · ${model.summary}`, colors.soft))
+          : [colorize('NVIDIA /models respondio, pero no hubo modelos de coding filtrables.', colors.warning)];
+      } catch (error) {
+        modelLines = [
+          colorize('No se pudieron cargar los modelos de NVIDIA NIM en vivo.', colors.warning),
           colorize(error instanceof Error ? error.message : String(error), colors.soft)
         ];
       }
@@ -777,7 +930,7 @@ async function createNewConnection(store) {
       step: 1,
       totalSteps: 3,
       title: 'Selecciona el proveedor',
-      subtitle: 'El proveedor guarda su base_url directamente en SQLite.',
+      subtitle: 'El proveedor usa su base_url definida en el catalogo local.',
       items: providerItems(providers),
       allowBack: true,
       detailBuilder: (selected) => [
@@ -845,6 +998,55 @@ async function createNewConnection(store) {
         models: discovered.models,
         modelCount: discovered.models.length
       };
+    }
+
+    if (catalog.id === 'openrouter') {
+      try {
+        const discovered = await fetchOpenRouterFreeModels();
+
+        if (discovered.models.length > 0) {
+          workingCatalog = {
+            ...catalog,
+            models: discovered.models,
+            modelCount: discovered.models.length
+          };
+        }
+      } catch (_error) {
+        workingCatalog = catalog;
+      }
+    }
+
+    if (catalog.id === 's-kaiba') {
+      const model = workingCatalog.models[0];
+      const authMethod = workingCatalog.authMethods[0];
+      const selectedProfiles = await selectSKaibaConnections();
+
+      if (isExit(selectedProfiles) || isBack(selectedProfiles)) {
+        if (isExit(selectedProfiles)) {
+          return selectedProfiles;
+        }
+
+        continue;
+      }
+
+      const profileName = slugifyProfileName(`${provider.id}-${model.id}-${authMethod.id}`);
+      const profile = buildProfile({
+        provider: workingCatalog,
+        model,
+        authMethod,
+        profileName,
+        apiKeyEnvVar: workingCatalog.defaultApiKeyEnvVar
+      });
+
+      profile.router = {
+        strategy: 'selected-free-gateway-failover',
+        candidateProfilePaths: selectedProfiles.map((item) => item.filePath),
+        candidateProfileNames: selectedProfiles.map((item) => item.profileName)
+      };
+
+      const filePath = await saveProfile(profile);
+      renderSummary({ profile, filePath });
+      return await waitForAnyKey();
     }
 
     if (catalog.id === 'ollama') {
@@ -1096,6 +1298,150 @@ async function createNewConnection(store) {
           `Modelo: ${selected.value.id}`,
           `Categoria: ${selected.value.category}`,
           `Contexto: ${selected.value.contextWindow}`,
+          selected.value.summary
+        ]
+      });
+
+      if (isExit(discoveredModel)) {
+        return discoveredModel;
+      }
+
+      if (isBack(discoveredModel)) {
+        continue;
+      }
+
+      const profileName = slugifyProfileName(`${provider.id}-${discoveredModel.id}-${authMethod.id}`);
+      const profile = buildProfile({
+        provider: catalog,
+        model: discoveredModel,
+        authMethod,
+        profileName,
+        apiKeyEnvVar: catalog.defaultApiKeyEnvVar
+      });
+
+      if (providerSecretFile) {
+        profile.auth.providerSecretFile = providerSecretFile;
+      }
+
+      const filePath = await saveProfile(profile);
+      renderSummary({ profile, filePath });
+      return await waitForAnyKey();
+    }
+
+    if (catalog.id === 'nvidia') {
+      const authMethod = catalog.authMethods[0];
+      const existingProviderSecret = await readManagedProviderTokenSecret(catalog.id);
+      const apiKeyValue = await promptText({
+        step: 2,
+        totalSteps: 4,
+        title: 'API key de NVIDIA NIM',
+        subtitle: 'Se usara para consultar /v1/models y listar solo modelos orientados a coding.',
+        label: 'NVIDIA_API_KEY',
+        placeholder: existingProviderSecret?.secret?.token
+          ? 'Deja vacio para conservar la API key compartida'
+          : 'Pega aqui tu NVIDIA_API_KEY',
+        secret: true,
+        allowBack: true
+      });
+
+      if (isExit(apiKeyValue)) {
+        return apiKeyValue;
+      }
+
+      if (isBack(apiKeyValue)) {
+        continue;
+      }
+
+      let providerSecretFile = existingProviderSecret?.filePath ?? '';
+      let tokenForDiscovery = existingProviderSecret?.secret?.token ?? '';
+
+      if (apiKeyValue.trim().length > 0) {
+        tokenForDiscovery = apiKeyValue.trim();
+        providerSecretFile = await saveManagedProviderTokenSecret({
+          providerId: catalog.id,
+          providerName: catalog.name,
+          envVar: catalog.defaultApiKeyEnvVar,
+          token: tokenForDiscovery
+        });
+      }
+
+      if (tokenForDiscovery.trim().length === 0) {
+        renderInfoScreen({
+          title: 'Falta NVIDIA_API_KEY',
+          subtitle: 'NVIDIA NIM requiere una API key para consultar /v1/models.',
+          lines: [
+            colorize('Guarda una NVIDIA_API_KEY y vuelve a intentarlo.', colors.warning)
+          ],
+          footer: 'Presiona una tecla para volver'
+        });
+
+        const missingKeyResult = await waitForAnyKey();
+
+        if (isExit(missingKeyResult)) {
+          return missingKeyResult;
+        }
+
+        continue;
+      }
+
+      let discovered;
+
+      try {
+        discovered = await fetchNvidiaCodingModels({
+          apiKey: tokenForDiscovery
+        });
+      } catch (error) {
+        renderInfoScreen({
+          title: 'No se pudo cargar NVIDIA NIM',
+          subtitle: 'Claude Connect intento consultar https://integrate.api.nvidia.com/v1/models.',
+          lines: [
+            colorize(`Base URL: ${catalog.baseUrl}`, colors.soft),
+            colorize(error instanceof Error ? error.message : String(error), colors.warning)
+          ],
+          footer: 'Presiona una tecla para volver'
+        });
+
+        const failedNvidiaResult = await waitForAnyKey();
+
+        if (isExit(failedNvidiaResult)) {
+          return failedNvidiaResult;
+        }
+
+        continue;
+      }
+
+      if (discovered.models.length === 0) {
+        renderInfoScreen({
+          title: 'Sin modelos de coding en NVIDIA',
+          subtitle: 'La API respondio, pero no devolvio modelos que pasen el filtro de programacion.',
+          lines: [
+            colorize('Claude Connect filtra por senales como coder, code, devstral, kimi, deepseek, minimax, nemotron, qwen, glm y gpt-oss.', colors.soft),
+            colorize('Si NVIDIA cambia los metadatos, actualiza el filtro o selecciona otro proveedor.', colors.soft)
+          ],
+          footer: 'Presiona una tecla para volver'
+        });
+
+        const emptyNvidiaResult = await waitForAnyKey();
+
+        if (isExit(emptyNvidiaResult)) {
+          return emptyNvidiaResult;
+        }
+
+        continue;
+      }
+
+      const discoveredModel = await selectFromList({
+        step: 3,
+        totalSteps: 4,
+        title: 'Selecciona el modelo NVIDIA NIM',
+        subtitle: 'Fuente: https://integrate.api.nvidia.com/v1/models · filtro: coding.',
+        items: modelItems(discovered.models),
+        allowBack: true,
+        detailBuilder: (selected) => [
+          `Modelo: ${selected.value.upstreamModelId}`,
+          `Categoria: ${selected.value.category}`,
+          `Contexto: ${selected.value.contextWindow}`,
+          `Vision: ${selected.value.supportsVision ? 'si' : 'no'}`,
           selected.value.summary
         ]
       });

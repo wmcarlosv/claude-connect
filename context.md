@@ -9,7 +9,8 @@
 La app hoy ya soporta:
 
 - interfaz interactiva de consola
-- catálogo local en SQLite
+- catálogo local generado desde seeds en código
+- soporte desde `Node.js 18`
 - proveedor `OpenCode Go`
 - proveedor `Zen`
 - proveedor `Kimi`
@@ -18,9 +19,11 @@ La app hoy ya soporta:
 - proveedor `Kilo Code Models`
 - proveedor `Ollama`
 - proveedor `Ollama Cloud Models`
+- proveedor `NVIDIA NIM`
 - proveedor `OpenAI`
 - proveedor `Inception Labs`
 - proveedor `OpenRouter`
+- proveedor `Seto Kaiba`
 - proveedor `Qwen`
 - autenticación por `Token`
 - autenticación por `OAuth` para `Qwen`
@@ -209,6 +212,33 @@ Fuentes oficiales:
 - https://docs.ollama.com/api/authentication
 - https://docs.ollama.com/api/tags
 
+### NVIDIA NIM
+
+- provider id: `nvidia`
+- auth: `token`
+- base URL del proveedor: `https://integrate.api.nvidia.com/v1`
+- variable sugerida: `NVIDIA_API_KEY`
+- integración: a través de gateway local Anthropic-compatible hacia `chat/completions`
+
+Modelos NVIDIA NIM:
+
+- se descubren dinámicamente desde `GET https://integrate.api.nvidia.com/v1/models`
+- Claude Connect filtra solo modelos orientados a coding
+- el filtro busca señales como `coder`, `code`, `devstral`, `kimi`, `deepseek`, `minimax`, `nemotron`, `qwen`, `glm` y `gpt-oss`
+
+Comportamiento:
+
+- el catálogo base no guarda modelos estáticos de NVIDIA
+- primero se guarda o reutiliza `NVIDIA_API_KEY`
+- luego se consulta `/models` y se muestra la lista filtrada
+- `moonshotai/kimi-k2.5`, si aparece en `/models`, se marca con soporte de visión
+- el gateway agrega `chat_template_kwargs.thinking=true` para `moonshotai/kimi-k2.5`
+- el presupuesto preventivo usa contexto `256K`, salida por defecto `8,192` y salida máxima `16,384` para `moonshotai/kimi-k2.5`
+
+Fuente oficial:
+
+- https://docs.api.nvidia.com/nim/reference/moonshotai-kimi-k2-5
+
 ### OpenAI
 
 - provider id: `openai`
@@ -259,14 +289,36 @@ Fuentes oficiales:
 ### OpenRouter
 
 - provider id: `openrouter`
-- modelo: `openrouter/free`
+- modelo base: `openrouter/free`
 - auth: `token`
 - base URL del proveedor: `https://openrouter.ai/api/v1`
 - integración: a través de gateway local Anthropic-compatible
 
+Comportamiento:
+
+- el catálogo base conserva `openrouter/free`
+- Claude Connect también consulta `GET /models` para descubrir variantes `:free` y otros modelos con pricing `0`
+- si la consulta en vivo falla, el proveedor sigue siendo usable con `openrouter/free`
+
 Fuente oficial:
 
 - https://openrouter.ai/openrouter/free/activity
+
+### Seto Kaiba
+
+- provider id: `s-kaiba`
+- modelo: `s-kaiba`
+- auth: `anonymous`
+- base URL del proveedor: `claude-connect://s-kaiba`
+- integración: router virtual interno de Claude Connect sobre el gateway local
+
+Comportamiento:
+
+- al crear la conexión, el usuario selecciona qué perfiles gratuitos quiere usar
+- solo admite perfiles que pasen por el gateway local de Claude Connect
+- intenta el siguiente candidato cuando recibe errores de cuota, `429`, créditos agotados o rate limit
+- no rota en errores de validación ni a mitad de una respuesta
+- sirve para aprovechar varios proveedores free sin cambiar manualmente de perfil
 
 ### Qwen
 
@@ -302,11 +354,13 @@ Si el perfil activado es:
 - `Kilo Code Models`: Claude usa el gateway local y reenvia a `https://api.kilo.ai/api/gateway/chat/completions`
 - `Ollama`: Claude usa el gateway local y reenvia a la URL del servidor configurado en `/api/chat`
 - `Ollama Cloud Models`: Claude usa el gateway local y reenvia a `https://ollama.com/api/chat`
+- `NVIDIA NIM`: Claude usa el gateway local y reenvia a `https://integrate.api.nvidia.com/v1/chat/completions` con el modelo de coding descubierto en `/models`
 - `OpenAI`: Claude usa el gateway local y reenvia a `https://api.openai.com/v1/chat/completions`
 - `Inception Labs`: Claude usa el gateway local y reenvia a `https://api.inceptionlabs.ai/v1/chat/completions`
-- `OpenRouter`: Claude usa el gateway local y envía `openrouter/free`
+- `OpenRouter`: Claude usa el gateway local y envía `openrouter/free` o el modelo free descubierto que selecciones
+- `Seto Kaiba`: Claude usa el gateway local como router virtual y hace failover entre perfiles gratuitos compatibles
 - `Qwen`: Claude usa el gateway local en `127.0.0.1:4310`
-- para `DeepSeek` e `Inception Labs`, el gateway ahora ajusta `max_tokens` y bloquea conversaciones sobredimensionadas con un error claro que sugiere `/compact` o `/clear`
+- para `DeepSeek`, `Inception Labs` y `NVIDIA NIM` en `moonshotai/kimi-k2.5`, el gateway ahora ajusta `max_tokens` y bloquea conversaciones sobredimensionadas con un error claro que sugiere `/compact` o `/clear`
 
 También existen estas opciones en el menú:
 
@@ -326,13 +380,10 @@ Archivo principal:
 Detalles:
 
 - el catálogo se siembra desde código
-- la base local se genera automáticamente dentro del home de Claude Connect, no en el `cwd`
-- rutas por defecto:
-  - Linux: `~/.claude-connect/storage/claude-connect.sqlite`
-  - Windows: `%APPDATA%\\claude-connect\\storage\\claude-connect.sqlite`
-- la base SQLite ya no se versiona en git
-- esto evita conflictos de `git pull` por cambios locales del catálogo
-- la tabla `models` ya guarda metadatos de transporte por modelo
+- el catálogo ya no usa `node:sqlite`
+- no se crea una base local en el `cwd`
+- esto evita conflictos de `git pull` por cambios locales del catálogo y permite correr desde `Node.js 18`
+- los modelos guardan metadatos de transporte desde los seeds del catálogo
 
 El catálogo guarda:
 
@@ -439,10 +490,12 @@ Se usa hoy para:
 - `OpenCode Go` en sus modelos `chat/completions`
 - `Kimi`
 - `Ollama`
+- `NVIDIA NIM`
 - `OpenAI`
 - `Qwen`
 - `Zen` en sus modelos `chat/completions`
 - `OpenRouter`
+- `Seto Kaiba`
 
 Endpoint local:
 
@@ -457,6 +510,7 @@ Responsabilidades:
 - traducir requests Anthropic al formato nativo de `Ollama` cuando el proveedor activo es `ollama`
 - normalizar algunos bloques de imagen antes de reenviar al upstream
 - reenviar al upstream correcto según el modelo
+- rotar entre perfiles gratuitos compatibles cuando el proveedor virtual activo es `Seto Kaiba`
 - soportar `stream` y endpoints básicos de mensajes
 
 Limitación actual:
@@ -485,7 +539,7 @@ Se corrigieron además:
 - apertura del navegador en OAuth de Qwen en Windows
 - reutilización del gateway si el puerto ya estaba ocupado por una instancia sana
 - reinicio controlado del gateway al activar perfiles críticos
-- supresión del warning experimental de SQLite en el binario publicado
+- eliminación de la dependencia `node:sqlite` para soportar Node.js 18 y 20 sin errores de módulo faltante
 
 ## Navegación de la UI
 
@@ -506,8 +560,7 @@ Comportamiento actual:
 
 Estado actual del repo:
 
-- la base SQLite local ya no se versiona
-- el catálogo compartido vive como seeds en código
+- la base SQLite local fue retirada; el catálogo compartido vive como seeds en código
 - las credenciales de usuario no se suben al repo
 - el paquete ya fue preparado para npm y publicado
 - el CLI ya soporta `claude-connect --version`, `-v` y `claude-connect version`

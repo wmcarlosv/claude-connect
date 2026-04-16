@@ -22,12 +22,12 @@
     "LICENSE"
   ],
   "scripts": {
-    "start": "node --no-warnings=ExperimentalWarning ./bin/claude-connect.js",
-    "test": "node --no-warnings=ExperimentalWarning --test",
+    "start": "node --no-warnings ./bin/claude-connect.js",
+    "test": "node --no-warnings --test",
     "prepublishOnly": "npm test"
   },
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=18.0.0"
   },
   "keywords": [
     "cli",

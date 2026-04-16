@@ -2,11 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createCatalogStore } from '../src/data/catalog-store.js';
 
-test('sqlite catalog seeds opencode-go, zen, kimi, deepseek, zai, ollama, ollama-cloud, kilo-free, openai, inception, openrouter and qwen providers with models and auth', () => {
+test('catalog seeds opencode-go, zen, kimi, deepseek, zai, ollama, ollama-cloud, kilo-free, nvidia, openai, inception, openrouter, s-kaiba and qwen providers with models and auth', () => {
   const store = createCatalogStore({ filename: ':memory:' });
   const providers = store.getProviders();
 
-  assert.equal(providers.length, 12);
+  assert.equal(providers.length, 14);
 
   const opencodeGo = store.getProviderCatalog('opencode-go');
   assert.ok(opencodeGo);
@@ -96,6 +96,14 @@ test('sqlite catalog seeds opencode-go, zen, kimi, deepseek, zai, ollama, ollama
   assert.equal(kilo.authMethods[1].id, 'token');
   assert.equal(kilo.oauth, null);
 
+  const nvidia = store.getProviderCatalog('nvidia');
+  assert.ok(nvidia);
+  assert.equal(nvidia.baseUrl, 'https://integrate.api.nvidia.com/v1');
+  assert.equal(nvidia.models.length, 0);
+  assert.equal(nvidia.authMethods.length, 1);
+  assert.equal(nvidia.authMethods[0].id, 'token');
+  assert.equal(nvidia.oauth, null);
+
   const openai = store.getProviderCatalog('openai');
   assert.ok(openai);
   assert.equal(openai.baseUrl, 'https://api.openai.com/v1');
@@ -134,6 +142,16 @@ test('sqlite catalog seeds opencode-go, zen, kimi, deepseek, zai, ollama, ollama
   assert.equal(openrouter.models[0].transportMode, 'gateway');
   assert.equal(openrouter.models[0].apiStyle, 'openai-chat');
   assert.equal(openrouter.oauth, null);
+
+  const sKaiba = store.getProviderCatalog('s-kaiba');
+  assert.ok(sKaiba);
+  assert.equal(sKaiba.baseUrl, 'claude-connect://s-kaiba');
+  assert.equal(sKaiba.models.length, 1);
+  assert.equal(sKaiba.authMethods.length, 1);
+  assert.equal(sKaiba.authMethods[0].id, 'anonymous');
+  assert.equal(sKaiba.models[0].id, 's-kaiba');
+  assert.equal(sKaiba.models[0].apiStyle, 'router-free');
+  assert.equal(sKaiba.oauth, null);
 
   const qwen = store.getProviderCatalog('qwen');
   assert.ok(qwen);

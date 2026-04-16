@@ -336,6 +336,39 @@ test('resolveClaudeTransportForProfile supports openai gateway models', async ()
   store.close();
 });
 
+test('resolveClaudeTransportForProfile supports nvidia gateway models', async () => {
+  const store = createCatalogStore({ filename: ':memory:' });
+  const provider = store.getProviderCatalog('nvidia');
+  const profile = buildProfile({
+    provider,
+    model: {
+      id: 'moonshotai-kimi-k2.5',
+      name: 'Kimi K2.5',
+      category: 'NVIDIA NIM Coding',
+      contextWindow: '256K',
+      summary: 'Modelo descubierto desde /models',
+      upstreamModelId: 'moonshotai/kimi-k2.5',
+      transportMode: 'gateway',
+      apiStyle: 'openai-chat',
+      apiBaseUrl: 'https://integrate.api.nvidia.com/v1',
+      apiPath: '/chat/completions',
+      authEnvMode: 'auth_token',
+      supportsVision: true
+    },
+    authMethod: provider.authMethods[0],
+    profileName: 'nvidia-kimi-k2-5-token',
+    apiKeyEnvVar: 'NVIDIA_API_KEY'
+  });
+  const transport = await resolveClaudeTransportForProfile({ profile });
+
+  assert.equal(transport.connectionMode, 'gateway');
+  assert.equal(transport.connectionBaseUrl, 'http://127.0.0.1:4310/anthropic');
+  assert.equal(transport.authEnvMode, 'auth_token');
+  assert.equal(transport.authToken, 'claude-connect-local');
+
+  store.close();
+});
+
 test('resolveClaudeTransportForProfile supports zai direct anthropic models', async () => {
   const store = createCatalogStore({ filename: ':memory:' });
   const provider = store.getProviderCatalog('zai');

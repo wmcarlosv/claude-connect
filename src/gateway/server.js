@@ -26,9 +26,14 @@ import { resolveClaudeConnectPaths } from '../lib/app-paths.js';
 import { readSwitchState } from '../lib/claude-settings.js';
 import { enforceModelTokenBudget } from '../lib/model-budget.js';
 import { readOAuthToken, refreshOAuthToken } from '../lib/oauth.js';
-import { readProfileFile } from '../lib/profile.js';
+import { listProfiles, readProfileFile } from '../lib/profile.js';
 import { reserveProviderInputTokens } from '../lib/provider-rate-limit.js';
 import { readManagedProviderTokenSecret, readManagedTokenSecret } from '../lib/secrets.js';
+import {
+  buildVargasThunderSummary,
+  isVargasThunderCandidateProfile,
+  shouldFailoverOnProviderError
+} from '../lib/s-kaiba.js';
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const cliEntryPath = path.join(projectRoot, 'bin', 'claude-connect.js');
@@ -206,6 +211,14 @@ function stringifyUpstreamMessage(value) {
 }
 
 function resolveGatewayUpstreamConfig(profile) {
+  if (profile?.provider?.id === 's-kaiba') {
+    return {
+      upstreamBaseUrl: 'claude-connect://s-kaiba',
+      upstreamApiStyle: 'router-free',
+      upstreamApiPath: '/router/free'
+    };
+  }
+
   if (profile?.provider?.id === 'ollama') {
     return {
       upstreamBaseUrl: typeof profile?.endpoint?.baseUrl === 'string' && profile.endpoint.baseUrl.length > 0
@@ -241,14 +254,7 @@ function buildOauthApiBaseUrl(profile, tokenRecord) {
   return 'https://portal.qwen.ai/v1';
 }
 
-async function resolveGatewayContext() {
-  const switchState = await readSwitchState();
-
-  if (!switchState?.active || typeof switchState.profilePath !== 'string') {
-    throw new Error('Claude Connect no tiene un perfil activo en Claude Code.');
-  }
-
-  const profile = await readProfileFile(switchState.profilePath);
+async function resolveGatewayContextForProfile(profile) {
   const authMethod = profile?.auth?.method === 'api_key' ? 'token' : profile?.auth?.method;
 
   if (authMethod === 'server' && profile?.provider?.id === 'ollama') {
@@ -343,6 +349,17 @@ async function resolveGatewayContext() {
   throw new Error(`Metodo de autenticacion no soportado por el gateway: ${authMethod}`);
 }
 
+async function resolveGatewayContext() {
+  const switchState = await readSwitchState();
+
+  if (!switchState?.active || typeof switchState.profilePath !== 'string') {
+    throw new Error('Claude Connect no tiene un perfil activo en Claude Code.');
+  }
+
+  const profile = await readProfileFile(switchState.profilePath);
+  return resolveGatewayContextForProfile(profile);
+}
+
 async function forwardUpstreamRequest({ targetUrl, headers, payload, context, refreshOnUnauthorized = true }) {
   let response;
 
@@ -429,6 +446,29 @@ async function forwardChatCompletion({ openAiRequest, context, refreshOnUnauthor
     context,
     refreshOnUnauthorized
   });
+}
+
+function applyProviderOpenAIRequestOptions(openAiRequest, profile) {
+  const providerId = profile?.provider?.id;
+  const modelId = getUpstreamModelId(profile);
+
+  if (providerId !== 'nvidia') {
+    return openAiRequest;
+  }
+
+  if (modelId !== 'moonshotai/kimi-k2.5') {
+    return openAiRequest;
+  }
+
+  return {
+    ...openAiRequest,
+    temperature: typeof openAiRequest.temperature === 'number' ? openAiRequest.temperature : 1,
+    top_p: typeof openAiRequest.top_p === 'number' ? openAiRequest.top_p : 0.95,
+    chat_template_kwargs: {
+      ...(isObject(openAiRequest.chat_template_kwargs) ? openAiRequest.chat_template_kwargs : {}),
+      thinking: true
+    }
+  };
 }
 
 async function forwardOllamaChat({ ollamaRequest, context, refreshOnUnauthorized = true }) {
@@ -518,49 +558,144 @@ async function handleCountTokens(request, response) {
   });
 }
 
-async function handleMessages(request, response) {
-  const rawBody = await readJsonBody(request);
-  const context = await resolveGatewayContext();
-
-  if (requestContainsImageInput(rawBody) && !profileSupportsImageInput(context.profile)) {
+async function executeAnthropicMessageForContext({ body, context }) {
+  if (requestContainsImageInput(body) && !profileSupportsImageInput(context.profile)) {
     const providerName = context.profile.provider.name;
     const modelName = context.profile.model.name;
     throw new Error(`${providerName} no admite imagenes con el modelo ${modelName} en esta integracion. Usa un proveedor o modelo con soporte visual.`);
   }
 
-  const body = enforceModelTokenBudget({
-    body: rawBody,
+  const guardedBody = enforceModelTokenBudget({
+    body,
     profile: context.profile
   });
+
   await reserveProviderInputTokens({
     profile: context.profile,
-    inputTokens: estimateTokenCountFromAnthropicRequest(body)
+    inputTokens: estimateTokenCountFromAnthropicRequest(guardedBody)
   });
 
   if (context.upstreamApiStyle === 'anthropic') {
-    const upstreamResponse = await forwardAnthropicMessage({
-      requestBody: body,
+    return forwardAnthropicMessage({
+      requestBody: guardedBody,
       context
     });
-    sendJson(response, 200, upstreamResponse);
-    return;
   }
 
   if (context.upstreamApiStyle === 'ollama-chat') {
     const ollamaRequest = buildOllamaRequestFromAnthropic({
-      body,
+      body: guardedBody,
       model: getUpstreamModelId(context.profile)
     });
     const upstreamResponse = await forwardOllamaChat({
       ollamaRequest,
       context
     });
-    const anthropicMessage = buildAnthropicMessageFromOllama({
+
+    return buildAnthropicMessageFromOllama({
       response: upstreamResponse,
       requestedModel: getUpstreamModelId(context.profile)
     });
+  }
 
-    if (body.stream === true) {
+  if (context.upstreamApiStyle === 'openai-chat') {
+    const openAiRequest = applyProviderOpenAIRequestOptions(buildOpenAIRequestFromAnthropic({
+      body: guardedBody,
+      model: getUpstreamModelId(context.profile)
+    }), context.profile);
+    const upstreamResponse = await forwardChatCompletion({
+      openAiRequest,
+      context
+    });
+
+    return buildAnthropicMessageFromOpenAI({
+      response: upstreamResponse,
+      requestedModel: getUpstreamModelId(context.profile)
+    });
+  }
+
+  throw new Error(`El gateway todavia no soporta el estilo ${context.upstreamApiStyle} para ${context.profile.provider.name}.`);
+}
+
+async function getVargasThunderCandidateProfiles() {
+  const profiles = await listProfiles();
+  return profiles
+    .filter((profile) => isVargasThunderCandidateProfile(profile))
+    .sort((left, right) => left.profileName.localeCompare(right.profileName));
+}
+
+async function executeVargasThunderMessage({ body, profile }) {
+  const allCandidates = await getVargasThunderCandidateProfiles();
+  const selectedPaths = Array.isArray(profile?.router?.candidateProfilePaths)
+    ? profile.router.candidateProfilePaths.filter((value) => typeof value === 'string' && value.length > 0)
+    : [];
+  const candidates = selectedPaths.length > 0
+    ? allCandidates.filter((candidate) => selectedPaths.includes(candidate.filePath))
+    : allCandidates;
+  const summary = buildVargasThunderSummary(candidates);
+
+  if (candidates.length === 0) {
+    throw new Error(
+      `${summary} No encontro conexiones gratuitas configuradas. Crea al menos un perfil free compatible antes de activarlo.`
+    );
+  }
+
+  const attemptErrors = [];
+
+  for (const candidate of candidates) {
+    if (requestContainsImageInput(body) && !profileSupportsImageInput(candidate)) {
+      continue;
+    }
+
+    let candidateContext;
+
+    try {
+      candidateContext = await resolveGatewayContextForProfile(candidate);
+    } catch (error) {
+      attemptErrors.push(`${candidate.profileName}: ${error instanceof Error ? error.message : String(error)}`);
+      continue;
+    }
+
+    try {
+      return await executeAnthropicMessageForContext({
+        body: {
+          ...body,
+          stream: false
+        },
+        context: candidateContext
+      });
+    } catch (error) {
+      if (shouldFailoverOnProviderError(error)) {
+        attemptErrors.push(`${candidate.profileName}: ${error instanceof Error ? error.message : String(error)}`);
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  if (attemptErrors.length > 0) {
+    throw new Error(
+      `${summary} Seto Kaiba agoto sus conexiones gratuitas disponibles. Intentos: ${attemptErrors.join(' | ')}`
+    );
+  }
+
+  throw new Error(
+    `${summary} Seto Kaiba no encontro una conexion gratuita compatible con esta solicitud. Revisa soporte de imagenes, credenciales o disponibilidad.`
+  );
+}
+
+async function handleMessages(request, response) {
+  const rawBody = await readJsonBody(request);
+  const context = await resolveGatewayContext();
+
+  if (context.upstreamApiStyle === 'router-free') {
+    const anthropicMessage = await executeVargasThunderMessage({
+      body: rawBody,
+      profile: context.profile
+    });
+
+    if (rawBody.stream === true) {
       response.writeHead(200, {
         'content-type': 'text/event-stream; charset=utf-8',
         'cache-control': 'no-cache, no-transform',
@@ -576,24 +711,21 @@ async function handleMessages(request, response) {
     return;
   }
 
-  if (context.upstreamApiStyle !== 'openai-chat') {
-    throw new Error(`El gateway todavia no soporta el estilo ${context.upstreamApiStyle} para ${context.profile.provider.name}.`);
+  if (context.upstreamApiStyle === 'anthropic') {
+    const upstreamResponse = await executeAnthropicMessageForContext({
+      body: rawBody,
+      context
+    });
+    sendJson(response, 200, upstreamResponse);
+    return;
   }
 
-  const openAiRequest = buildOpenAIRequestFromAnthropic({
-    body,
-    model: getUpstreamModelId(context.profile)
-  });
-  const upstreamResponse = await forwardChatCompletion({
-    openAiRequest,
+  const anthropicMessage = await executeAnthropicMessageForContext({
+    body: rawBody,
     context
   });
-  const anthropicMessage = buildAnthropicMessageFromOpenAI({
-    response: upstreamResponse,
-    requestedModel: getUpstreamModelId(context.profile)
-  });
 
-  if (body.stream === true) {
+  if (rawBody.stream === true) {
     response.writeHead(200, {
       'content-type': 'text/event-stream; charset=utf-8',
       'cache-control': 'no-cache, no-transform',
@@ -716,7 +848,7 @@ export async function startGatewayInBackground() {
 
   await fsPromises.mkdir(path.dirname(gatewayLogPath), { recursive: true });
   const outputFd = fs.openSync(gatewayLogPath, 'a');
-  const child = spawn(process.execPath, ['--no-warnings=ExperimentalWarning', cliEntryPath, 'gateway', 'serve'], {
+  const child = spawn(process.execPath, ['--no-warnings', cliEntryPath, 'gateway', 'serve'], {
     cwd: projectRoot,
     detached: true,
     stdio: ['ignore', outputFd, outputFd]

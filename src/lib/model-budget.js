@@ -32,6 +32,14 @@ export function getModelTokenLimits(profile) {
     };
   }
 
+  if (providerId === 'nvidia' && modelId === 'moonshotai/kimi-k2.5') {
+    return {
+      contextWindowTokens: 256_000,
+      defaultOutputTokens: 8_192,
+      maxOutputTokens: 16_384
+    };
+  }
+
   return null;
 }
 

@@ -11,6 +11,37 @@ export function slugifyProfileName(value) {
     .slice(0, 48);
 }
 
+function inferFreeTierModel({ provider, model }) {
+  const providerId = typeof provider?.id === 'string' ? provider.id.toLowerCase() : '';
+  const modelId = typeof model?.id === 'string' ? model.id.toLowerCase() : '';
+  const upstreamModelId = typeof model?.upstreamModelId === 'string' ? model.upstreamModelId.toLowerCase() : '';
+  const name = typeof model?.name === 'string' ? model.name.toLowerCase() : '';
+  const category = typeof model?.category === 'string' ? model.category.toLowerCase() : '';
+
+  if (model?.isFreeTier === true || model?.supportsAnonymous === true) {
+    return true;
+  }
+
+  if (providerId === 's-kaiba') {
+    return true;
+  }
+
+  if (upstreamModelId === 'openrouter/free') {
+    return true;
+  }
+
+  if (providerId === 'kilo-free' && model?.supportsAnonymous === true) {
+    return true;
+  }
+
+  return modelId.includes(':free')
+    || modelId.endsWith('-free')
+    || upstreamModelId.includes(':free')
+    || upstreamModelId.endsWith('-free')
+    || name.includes(' free')
+    || category.includes('free');
+}
+
 export function buildProfile({ provider, model, authMethod, profileName, apiKeyEnvVar, oauthSession }) {
   const protocol = model.apiStyle === 'openai-chat'
     ? 'openai-compatible'
@@ -33,7 +64,9 @@ export function buildProfile({ provider, model, authMethod, profileName, apiKeyE
       apiBaseUrl: model.apiBaseUrl,
       apiPath: model.apiPath,
       authEnvMode: model.authEnvMode,
-      supportsVision: model.supportsVision ?? true
+      supportsVision: model.supportsVision ?? true,
+      supportsAnonymous: model.supportsAnonymous ?? false,
+      isFreeTier: inferFreeTierModel({ provider, model })
     },
     auth: {
       method: authMethod.id

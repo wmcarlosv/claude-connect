@@ -15,6 +15,19 @@ test('getModelTokenLimits returns known limits for mercury-2', () => {
   });
 });
 
+test('getModelTokenLimits returns known limits for nvidia kimi k2.5', () => {
+  const limits = getModelTokenLimits({
+    provider: { id: 'nvidia' },
+    model: { id: 'nvidia-kimi-k2.5', upstreamModelId: 'moonshotai/kimi-k2.5' }
+  });
+
+  assert.deepEqual(limits, {
+    contextWindowTokens: 256000,
+    defaultOutputTokens: 8192,
+    maxOutputTokens: 16384
+  });
+});
+
 test('enforceModelTokenBudget clamps mercury-2 output budget to the model maximum', () => {
   const body = enforceModelTokenBudget({
     profile: {
