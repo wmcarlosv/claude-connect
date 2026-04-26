@@ -6,6 +6,7 @@ const CODING_PATTERNS = [
   /starcoder/i,
   /devstral/i,
   /deepseek/i,
+  /gemma/i,
   /kimi/i,
   /minimax/i,
   /nemotron/i,
@@ -15,12 +16,21 @@ const CODING_PATTERNS = [
 ];
 
 const VISION_PATTERNS = [
+  /gemma-(?:3|4)/i,
+  /image/i,
   /kimi-k2\.5/i,
+  /video/i,
+  /visual/i,
   /vision/i,
   /vl\b/i,
   /multimodal/i,
   /maverick/i,
   /scout/i
+];
+
+const DOWNLOADABLE_PATTERNS = [
+  /\bdownloadable\b/i,
+  /\bdownload available\b/i
 ];
 
 function describeRequestError(error) {
@@ -44,9 +54,18 @@ function collectSearchText(model) {
     model?.description,
     model?.owned_by,
     model?.publisher,
+    model?.api_catalog_type,
+    model?.catalog_type,
+    model?.access,
+    model?.availability,
+    model?.status,
+    model?.type,
     Array.isArray(model?.tags) ? model.tags.join(' ') : '',
+    Array.isArray(model?.labels) ? model.labels.join(' ') : '',
+    Array.isArray(model?.badges) ? model.badges.join(' ') : '',
     Array.isArray(model?.categories) ? model.categories.join(' ') : '',
-    Array.isArray(model?.use_cases) ? model.use_cases.join(' ') : ''
+    Array.isArray(model?.use_cases) ? model.use_cases.join(' ') : '',
+    Array.isArray(model?.deployment_options) ? model.deployment_options.join(' ') : ''
   ];
 
   return parts
@@ -58,6 +77,22 @@ export function isNvidiaCodingModel(model) {
   const searchText = collectSearchText(model);
 
   return CODING_PATTERNS.some((pattern) => pattern.test(searchText));
+}
+
+export function isNvidiaDownloadableModel(model) {
+  if (model?.downloadable === true
+    || model?.is_downloadable === true
+    || model?.download_available === true
+    || model?.downloadAvailable === true) {
+    return true;
+  }
+
+  const searchText = collectSearchText(model);
+  return DOWNLOADABLE_PATTERNS.some((pattern) => pattern.test(searchText));
+}
+
+export function isNvidiaSupportedModel(model) {
+  return isNvidiaCodingModel(model) || isNvidiaDownloadableModel(model);
 }
 
 function supportsVision(model) {
@@ -72,12 +107,13 @@ function summarizeNvidiaModel(model) {
     typeof model?.owned_by === 'string' ? model.owned_by : null,
     typeof model?.publisher === 'string' ? model.publisher : null,
     typeof contextLength === 'number' ? `${contextLength.toLocaleString('en-US')} ctx` : null,
+    isNvidiaDownloadableModel(model) ? 'downloadable' : null,
     supportsVision(model) ? 'vision' : null
   ].filter(Boolean);
 
   return parts.length > 0
     ? parts.join(' · ')
-    : 'Modelo de coding descubierto desde NVIDIA /models';
+    : 'Modelo descubierto desde NVIDIA /models';
 }
 
 function mapNvidiaModel(model, index) {
@@ -89,7 +125,7 @@ function mapNvidiaModel(model, index) {
   return {
     id: modelId.replace(/[/:]/g, '-'),
     name: model?.name || modelId,
-    category: 'NVIDIA NIM Coding',
+    category: isNvidiaDownloadableModel(model) ? 'NVIDIA NIM Downloadable' : 'NVIDIA NIM Coding',
     contextWindow: typeof contextLength === 'number'
       ? contextLength.toLocaleString('en-US')
       : modelId === 'moonshotai/kimi-k2.5'
@@ -108,7 +144,7 @@ function mapNvidiaModel(model, index) {
   };
 }
 
-export async function fetchNvidiaCodingModels({ apiKey, timeoutMs = 8000 }) {
+export async function fetchNvidiaModels({ apiKey, timeoutMs = 8000 }) {
   const token = typeof apiKey === 'string' ? apiKey.trim() : '';
 
   if (token.length === 0) {
@@ -140,14 +176,14 @@ export async function fetchNvidiaCodingModels({ apiKey, timeoutMs = 8000 }) {
       : Array.isArray(payload?.models)
         ? payload.models
         : [];
-    const codingModels = rawModels
+    const supportedModels = rawModels
       .filter((model) => typeof model?.id === 'string' && model.id.length > 0)
-      .filter((model) => isNvidiaCodingModel(model))
+      .filter((model) => isNvidiaSupportedModel(model))
       .sort((left, right) => String(left.name || left.id).localeCompare(String(right.name || right.id)));
     const uniqueModels = [];
     const seen = new Set();
 
-    for (const model of codingModels) {
+    for (const model of supportedModels) {
       if (seen.has(model.id)) {
         continue;
       }
@@ -166,3 +202,5 @@ export async function fetchNvidiaCodingModels({ apiKey, timeoutMs = 8000 }) {
     clearTimeout(timer);
   }
 }
+
+export const fetchNvidiaCodingModels = fetchNvidiaModels;

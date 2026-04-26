@@ -22,6 +22,8 @@ import {
   readManagedTokenSecret,
   saveManagedProviderTokenSecret
 } from './lib/secrets.js';
+import { fetchCloudflareWorkersAiModels, normalizeCloudflareAccountId } from './lib/cloudflare-workers-ai.js';
+import { fetchDeepSeekModels } from './lib/deepseek.js';
 import { fetchKiloModels } from './lib/kilo.js';
 import { fetchNvidiaCodingModels } from './lib/nvidia.js';
 import { fetchOpenRouterFreeModels } from './lib/openrouter.js';
@@ -496,6 +498,21 @@ async function showCatalog(store) {
     }
   }
 
+  if (catalog.id === 'deepseek') {
+    try {
+      const discovered = await fetchDeepSeekModels();
+      modelLines = discovered.models.length > 0
+        ? discovered.models.map((model) => colorize(`${model.name} · ${model.summary}`, colors.soft))
+        : [colorize('DeepSeek /models respondio, pero no devolvio modelos utilizables.', colors.warning)];
+    } catch (error) {
+      modelLines = [
+        colorize('No se pudieron cargar los modelos actuales de DeepSeek en vivo.', colors.warning),
+        colorize('Se mantiene disponible el catalogo local como respaldo.', colors.soft),
+        colorize(error instanceof Error ? error.message : String(error), colors.soft)
+      ];
+    }
+  }
+
   if (catalog.id === 'ollama-cloud') {
     const providerSecret = await readManagedProviderTokenSecret(catalog.id);
     const token = typeof providerSecret?.secret?.token === 'string' ? providerSecret.secret.token.trim() : '';
@@ -525,14 +542,14 @@ async function showCatalog(store) {
 
     if (token.length === 0) {
       modelLines = [
-        colorize('Guarda primero NVIDIA_API_KEY en una conexion de NVIDIA NIM para listar modelos de coding en vivo.', colors.warning)
+        colorize('Guarda primero NVIDIA_API_KEY en una conexion de NVIDIA NIM para listar modelos de coding y Downloadable en vivo.', colors.warning)
       ];
     } else {
       try {
         const discovered = await fetchNvidiaCodingModels({ apiKey: token });
         modelLines = discovered.models.length > 0
           ? discovered.models.map((model) => colorize(`${model.name} · ${model.summary}`, colors.soft))
-          : [colorize('NVIDIA /models respondio, pero no hubo modelos de coding filtrables.', colors.warning)];
+          : [colorize('NVIDIA /models respondio, pero no hubo modelos de coding o Downloadable filtrables.', colors.warning)];
       } catch (error) {
         modelLines = [
           colorize('No se pudieron cargar los modelos de NVIDIA NIM en vivo.', colors.warning),
@@ -1016,6 +1033,22 @@ async function createNewConnection(store) {
       }
     }
 
+    if (catalog.id === 'deepseek') {
+      try {
+        const discovered = await fetchDeepSeekModels();
+
+        if (discovered.models.length > 0) {
+          workingCatalog = {
+            ...catalog,
+            models: discovered.models,
+            modelCount: discovered.models.length
+          };
+        }
+      } catch (_error) {
+        workingCatalog = catalog;
+      }
+    }
+
     if (catalog.id === 's-kaiba') {
       const model = workingCatalog.models[0];
       const authMethod = workingCatalog.authMethods[0];
@@ -1335,7 +1368,7 @@ async function createNewConnection(store) {
         step: 2,
         totalSteps: 4,
         title: 'API key de NVIDIA NIM',
-        subtitle: 'Se usara para consultar /v1/models y listar solo modelos orientados a coding.',
+        subtitle: 'Se usara para consultar /v1/models y listar modelos de coding o marcados como Downloadable.',
         label: 'NVIDIA_API_KEY',
         placeholder: existingProviderSecret?.secret?.token
           ? 'Deja vacio para conservar la API key compartida'
@@ -1412,10 +1445,10 @@ async function createNewConnection(store) {
 
       if (discovered.models.length === 0) {
         renderInfoScreen({
-          title: 'Sin modelos de coding en NVIDIA',
-          subtitle: 'La API respondio, pero no devolvio modelos que pasen el filtro de programacion.',
+          title: 'Sin modelos elegibles en NVIDIA',
+          subtitle: 'La API respondio, pero no devolvio modelos de coding ni marcados como Downloadable.',
           lines: [
-            colorize('Claude Connect filtra por senales como coder, code, devstral, kimi, deepseek, minimax, nemotron, qwen, glm y gpt-oss.', colors.soft),
+            colorize('Claude Connect filtra por senales como Downloadable, coder, code, gemma, devstral, kimi, deepseek, minimax, nemotron, qwen, glm y gpt-oss.', colors.soft),
             colorize('Si NVIDIA cambia los metadatos, actualiza el filtro o selecciona otro proveedor.', colors.soft)
           ],
           footer: 'Presiona una tecla para volver'
@@ -1434,7 +1467,7 @@ async function createNewConnection(store) {
         step: 3,
         totalSteps: 4,
         title: 'Selecciona el modelo NVIDIA NIM',
-        subtitle: 'Fuente: https://integrate.api.nvidia.com/v1/models · filtro: coding.',
+        subtitle: 'Fuente: https://integrate.api.nvidia.com/v1/models · filtro: coding + Downloadable.',
         items: modelItems(discovered.models),
         allowBack: true,
         detailBuilder: (selected) => [
@@ -1462,6 +1495,202 @@ async function createNewConnection(store) {
         profileName,
         apiKeyEnvVar: catalog.defaultApiKeyEnvVar
       });
+
+      if (providerSecretFile) {
+        profile.auth.providerSecretFile = providerSecretFile;
+      }
+
+      const filePath = await saveProfile(profile);
+      renderSummary({ profile, filePath });
+      return await waitForAnyKey();
+    }
+
+    if (catalog.id === 'cloudflare-workers-ai') {
+      const authMethod = catalog.authMethods[0];
+      const existingProviderSecret = await readManagedProviderTokenSecret(catalog.id);
+      const accountIdInput = await promptText({
+        step: 2,
+        totalSteps: 5,
+        title: 'Account ID de Cloudflare',
+        subtitle: 'Se usara para construir el endpoint OpenAI-compatible de Workers AI.',
+        label: 'Account ID',
+        defaultValue: existingProviderSecret?.secret?.accountId ?? '',
+        placeholder: '32 caracteres hexadecimales',
+        allowBack: true
+      });
+
+      if (isExit(accountIdInput)) {
+        return accountIdInput;
+      }
+
+      if (isBack(accountIdInput)) {
+        continue;
+      }
+
+      let accountId;
+
+      try {
+        accountId = normalizeCloudflareAccountId(accountIdInput);
+      } catch (error) {
+        renderInfoScreen({
+          title: 'Account ID invalido',
+          subtitle: 'Cloudflare Workers AI requiere el Account ID de tu cuenta.',
+          lines: [
+            colorize(error instanceof Error ? error.message : String(error), colors.warning)
+          ],
+          footer: 'Presiona una tecla para volver'
+        });
+
+        const invalidAccountResult = await waitForAnyKey();
+
+        if (isExit(invalidAccountResult)) {
+          return invalidAccountResult;
+        }
+
+        continue;
+      }
+
+      const apiKeyValue = await promptText({
+        step: 3,
+        totalSteps: 5,
+        title: 'API token de Cloudflare Workers AI',
+        subtitle: 'Debe tener permisos Workers AI Read o Workers AI Edit.',
+        label: 'CLOUDFLARE_API_TOKEN',
+        placeholder: existingProviderSecret?.secret?.token
+          ? 'Deja vacio para conservar el token compartido'
+          : 'Pega aqui tu CLOUDFLARE_API_TOKEN',
+        secret: true,
+        allowBack: true
+      });
+
+      if (isExit(apiKeyValue)) {
+        return apiKeyValue;
+      }
+
+      if (isBack(apiKeyValue)) {
+        continue;
+      }
+
+      let providerSecretFile = existingProviderSecret?.filePath ?? '';
+      let tokenForDiscovery = existingProviderSecret?.secret?.token ?? '';
+
+      if (apiKeyValue.trim().length > 0) {
+        tokenForDiscovery = apiKeyValue.trim();
+      }
+
+      if (tokenForDiscovery.trim().length === 0) {
+        renderInfoScreen({
+          title: 'Falta CLOUDFLARE_API_TOKEN',
+          subtitle: 'Cloudflare Workers AI requiere un API token para consultar modelos.',
+          lines: [
+            colorize('Guarda un token con permiso Workers AI Read o Edit y vuelve a intentarlo.', colors.warning)
+          ],
+          footer: 'Presiona una tecla para volver'
+        });
+
+        const missingTokenResult = await waitForAnyKey();
+
+        if (isExit(missingTokenResult)) {
+          return missingTokenResult;
+        }
+
+        continue;
+      }
+
+      providerSecretFile = await saveManagedProviderTokenSecret({
+        providerId: catalog.id,
+        providerName: catalog.name,
+        envVar: catalog.defaultApiKeyEnvVar,
+        token: tokenForDiscovery.trim(),
+        accountId
+      });
+
+      let discovered;
+
+      try {
+        discovered = await fetchCloudflareWorkersAiModels({
+          accountId,
+          apiKey: tokenForDiscovery
+        });
+      } catch (error) {
+        renderInfoScreen({
+          title: 'No se pudo cargar Workers AI',
+          subtitle: 'Claude Connect intento consultar /ai/models/search para descubrir modelos Text Generation.',
+          lines: [
+            colorize(`Account ID: ${accountId}`, colors.soft),
+            colorize(error instanceof Error ? error.message : String(error), colors.warning)
+          ],
+          footer: 'Presiona una tecla para volver'
+        });
+
+        const failedCloudflareResult = await waitForAnyKey();
+
+        if (isExit(failedCloudflareResult)) {
+          return failedCloudflareResult;
+        }
+
+        continue;
+      }
+
+      if (discovered.models.length === 0) {
+        renderInfoScreen({
+          title: 'Sin modelos Text Generation',
+          subtitle: 'La API respondio, pero no devolvio modelos utilizables para Claude Code.',
+          lines: [
+            colorize('Claude Connect filtra modelos de tipo Text Generation para usarlos via chat/completions.', colors.soft),
+            colorize('Revisa permisos Workers AI o disponibilidad de modelos en tu cuenta.', colors.soft)
+          ],
+          footer: 'Presiona una tecla para volver'
+        });
+
+        const emptyCloudflareResult = await waitForAnyKey();
+
+        if (isExit(emptyCloudflareResult)) {
+          return emptyCloudflareResult;
+        }
+
+        continue;
+      }
+
+      const discoveredModel = await selectFromList({
+        step: 4,
+        totalSteps: 5,
+        title: 'Selecciona el modelo Workers AI',
+        subtitle: 'Fuente: Cloudflare /ai/models/search · filtro: Text Generation.',
+        items: modelItems(discovered.models),
+        allowBack: true,
+        detailBuilder: (selected) => [
+          `Modelo: ${selected.value.upstreamModelId}`,
+          `Categoria: ${selected.value.category}`,
+          `Contexto: ${selected.value.contextWindow}`,
+          `Vision: ${selected.value.supportsVision ? 'si' : 'no'}`,
+          selected.value.summary
+        ]
+      });
+
+      if (isExit(discoveredModel)) {
+        return discoveredModel;
+      }
+
+      if (isBack(discoveredModel)) {
+        continue;
+      }
+
+      const profileName = slugifyProfileName(`${provider.id}-${discoveredModel.id}-${authMethod.id}`);
+      const profile = buildProfile({
+        provider: {
+          ...catalog,
+          baseUrl: discovered.baseUrl
+        },
+        model: discoveredModel,
+        authMethod,
+        profileName,
+        apiKeyEnvVar: catalog.defaultApiKeyEnvVar
+      });
+
+      profile.cloudflare = {
+        accountId
+      };
 
       if (providerSecretFile) {
         profile.auth.providerSecretFile = providerSecretFile;

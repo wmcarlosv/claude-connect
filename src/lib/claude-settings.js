@@ -150,8 +150,10 @@ export async function resolveClaudeTransportForProfile({
 
     if (profile.provider.id === 'deepseek') {
       extraEnv.API_TIMEOUT_MS = '600000';
-      extraEnv.ANTHROPIC_MODEL = profile.model.id;
-      extraEnv.ANTHROPIC_DEFAULT_HAIKU_MODEL = profile.model.id;
+      extraEnv.ANTHROPIC_MODEL = profile.model.upstreamModelId ?? profile.model.id;
+      extraEnv.ANTHROPIC_DEFAULT_HAIKU_MODEL = profile.model.upstreamModelId ?? profile.model.id;
+      extraEnv.ANTHROPIC_DEFAULT_SONNET_MODEL = profile.model.upstreamModelId ?? profile.model.id;
+      extraEnv.ANTHROPIC_DEFAULT_OPUS_MODEL = profile.model.upstreamModelId ?? profile.model.id;
     }
 
     if (profile.provider.id === 'zai') {

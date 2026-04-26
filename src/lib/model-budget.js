@@ -16,19 +16,16 @@ export function getModelTokenLimits(profile) {
     };
   }
 
-  if (providerId === 'deepseek' && modelId === 'deepseek-chat') {
+  if (providerId === 'deepseek' && (
+    modelId === 'deepseek-v4-flash'
+    || modelId === 'deepseek-v4-pro'
+    || modelId === 'deepseek-chat'
+    || modelId === 'deepseek-reasoner'
+  )) {
     return {
-      contextWindowTokens: 128_000,
-      defaultOutputTokens: 4_000,
-      maxOutputTokens: 8_000
-    };
-  }
-
-  if (providerId === 'deepseek' && modelId === 'deepseek-reasoner') {
-    return {
-      contextWindowTokens: 128_000,
-      defaultOutputTokens: 32_000,
-      maxOutputTokens: 64_000
+      contextWindowTokens: 1_000_000,
+      defaultOutputTokens: modelId === 'deepseek-v4-pro' ? 16_384 : 8_192,
+      maxOutputTokens: 384_000
     };
   }
 
@@ -37,6 +34,22 @@ export function getModelTokenLimits(profile) {
       contextWindowTokens: 256_000,
       defaultOutputTokens: 8_192,
       maxOutputTokens: 16_384
+    };
+  }
+
+  if (providerId === 'nvidia' && modelId === 'google/gemma-4-31b-it') {
+    return {
+      contextWindowTokens: 256_000,
+      defaultOutputTokens: 8_192,
+      maxOutputTokens: 16_384
+    };
+  }
+
+  if (providerId === 'gemini' && /^gemini-(?:3|2\.5)-/.test(modelId)) {
+    return {
+      contextWindowTokens: 1_048_576,
+      defaultOutputTokens: 8_192,
+      maxOutputTokens: 65_536
     };
   }
 

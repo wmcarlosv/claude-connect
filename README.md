@@ -1,6 +1,6 @@
 # Claude Connect
 
-> Conecta `Claude Code` con `OpenCode Go`, `Zen`, `Kimi`, `DeepSeek`, `Z.AI`, `Kilo Code Models`, `Ollama`, `Ollama Cloud Models`, `NVIDIA NIM`, `OpenAI`, `Inception Labs`, `OpenRouter`, `Seto Kaiba` y `Qwen` desde una interfaz de consola clara, rápida y reversible.
+> Conecta `Claude Code` con `OpenCode Go`, `Zen`, `Kimi`, `DeepSeek`, `Z.AI`, `Kilo Code Models`, `Ollama`, `Ollama Cloud Models`, `NVIDIA NIM`, `OpenAI`, `Google Gemini`, `Cloudflare Workers AI`, `Inception Labs`, `OpenRouter`, `Seto Kaiba` y `Qwen` desde una interfaz de consola clara, rápida y reversible.
 
 [![npm version](https://img.shields.io/npm/v/claude-connect?style=for-the-badge&logo=npm&color=cb3837)](https://www.npmjs.com/package/claude-connect)
 [![node](https://img.shields.io/badge/node-%3E%3D18-2f7d32?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
@@ -17,7 +17,7 @@
 
 ### Highlights
 
-- `OpenCode Go`, `Zen`, `Kimi`, `DeepSeek`, `Z.AI`, `Kilo Code Models`, `Ollama`, `Ollama Cloud Models`, `NVIDIA NIM`, `OpenAI`, `Inception Labs`, `OpenRouter`, `Seto Kaiba` y `Qwen` listos desde el primer arranque
+- `OpenCode Go`, `Zen`, `Kimi`, `DeepSeek`, `Z.AI`, `Kilo Code Models`, `Ollama`, `Ollama Cloud Models`, `NVIDIA NIM`, `OpenAI`, `Google Gemini`, `Cloudflare Workers AI`, `Inception Labs`, `OpenRouter`, `Seto Kaiba` y `Qwen` listos desde el primer arranque
 - soporte para `Token` y `OAuth` cuando el proveedor lo permite
 - API keys compartidas por proveedor para no repetir el mismo token en cada modelo
 - activación reversible sobre la instalación real de `Claude Code`
@@ -87,8 +87,10 @@ Al activar:
 - `Kilo Code Models` consulta `https://api.kilo.ai/api/gateway/models`, lista modelos gratis y pagos, y usa `https://api.kilo.ai/api/gateway/chat/completions`
 - `Ollama` pide una URL local o remota, valida `/api/tags` y usa el gateway local sobre `.../api/chat`
 - `Ollama Cloud Models` consulta `https://ollama.com/api/tags` con `OLLAMA_API_KEY`, usa los modelos que realmente devuelve tu cuenta y trabaja sobre `https://ollama.com/api/chat`
-- `NVIDIA NIM` consulta `https://integrate.api.nvidia.com/v1/models`, filtra modelos de coding y usa `https://integrate.api.nvidia.com/v1/chat/completions`
+- `NVIDIA NIM` consulta `https://integrate.api.nvidia.com/v1/models`, filtra modelos de coding o marcados como `Downloadable` y usa `https://integrate.api.nvidia.com/v1/chat/completions`
 - `OpenAI` usa el gateway local sobre `https://api.openai.com/v1/chat/completions`
+- `Google Gemini` usa el gateway local sobre `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions`
+- `Cloudflare Workers AI` pide `Account ID`, consulta `https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/models/search`, lista modelos `Text Generation` y usa `https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1/chat/completions`
 - `Inception Labs` usa el gateway local sobre `https://api.inceptionlabs.ai/v1/chat/completions`
 - `OpenRouter` usa `openrouter/free` y modelos `:free` descubiertos desde `https://openrouter.ai/api/v1/models`
 - `Seto Kaiba` usa el gateway local como router virtual y rota entre conexiones gratuitas ya configuradas cuando encuentra cuota o rate limit
@@ -108,8 +110,10 @@ Al activar:
 | `Kilo Code Models` | modelos gratis y pagos descubiertos desde `/models` | `Gratis sin token`, `Token` | Gateway local |
 | `Ollama` | modelos descubiertos desde tu servidor | `Servidor Ollama` | Gateway local |
 | `Ollama Cloud Models` | modelos cloud descubiertos desde `ollama.com/api/tags` | `Token` | Gateway local |
-| `NVIDIA NIM` | modelos de coding descubiertos desde `/models` | `Token` | Gateway local |
+| `NVIDIA NIM` | modelos de coding y `Downloadable` descubiertos desde `/models` | `Token` | Gateway local |
 | `OpenAI` | `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.3-codex`, `gpt-5.2-codex`, `gpt-5.2`, `gpt-5.1-codex-max`, `gpt-5.1-codex-mini` | `Token` | Gateway local |
+| `Google Gemini` | `gemini-3-pro-preview`, `gemini-3-flash-preview`, `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite-preview-09-2025` | `Token` | Gateway local |
+| `Cloudflare Workers AI` | modelos `Text Generation` descubiertos desde `/ai/models/search` | `Token + Account ID` | Gateway local |
 | `Inception Labs` | `mercury-2` | `Token` | Gateway local |
 | `OpenRouter` | `openrouter/free` + modelos `:free` descubiertos en vivo | `Token` | Gateway local |
 | `Seto Kaiba` | `s-kaiba` | `Automatico` | Gateway local |
@@ -136,6 +140,29 @@ Nota sobre `OpenAI`:
   - https://platform.openai.com/docs/api-reference/chat/create
   - https://platform.openai.com/docs/api-reference/authentication
   - https://developers.openai.com/api/docs/models
+
+Nota sobre `Google Gemini`:
+
+- usa el endpoint OpenAI-compatible oficial `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions`
+- autenticacion soportada: `GEMINI_API_KEY`
+- modelos incluidos: `gemini-3-pro-preview`, `gemini-3-flash-preview`, `gemini-2.5-pro`, `gemini-2.5-flash` y `gemini-2.5-flash-lite-preview-09-2025`
+- Claude Connect aplica presupuesto preventivo de contexto `1M` y salida maxima `65,536`
+- para modelos Gemini 3/2.5, el gateway agrega `reasoning_effort` de forma conservadora y mantiene soporte de herramientas e imagenes por el adaptador OpenAI-compatible
+- referencias oficiales:
+  - https://ai.google.dev/gemini-api/docs/openai
+  - https://ai.google.dev/models/gemini
+
+Nota sobre `Cloudflare Workers AI`:
+
+- usa el endpoint OpenAI-compatible oficial `https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1/chat/completions`
+- al crear la conexion pide `Cloudflare Account ID` y `CLOUDFLARE_API_TOKEN`
+- la app consulta `GET /accounts/{account_id}/ai/models/search?task=Text%20Generation` para cargar modelos dinamicamente
+- Cloudflare no marca "modelos gratis" como tal; Workers AI ofrece una asignacion gratuita diaria de `10,000 Neurons` y luego requiere Workers Paid si se excede
+- Claude Connect filtra modelos de `Text Generation` y prioriza señales como `gpt-oss`, `kimi`, `qwen`, `glm`, `deepseek`, `coder`, `function calling`, `reasoning` y `vision`
+- referencias oficiales:
+  - https://developers.cloudflare.com/workers-ai/configuration/open-ai-compatibility/
+  - https://developers.cloudflare.com/api/resources/ai/subresources/models/
+  - https://developers.cloudflare.com/workers-ai/platform/pricing/
 
 Nota sobre `Inception Labs`:
 
@@ -203,7 +230,7 @@ Nota sobre `NVIDIA NIM`:
 
 - usa `https://integrate.api.nvidia.com/v1/chat/completions` con `NVIDIA_API_KEY`
 - la selección de modelos es dinámica: Claude Connect consulta `GET https://integrate.api.nvidia.com/v1/models`
-- solo muestra modelos orientados a programación según señales como `coder`, `code`, `devstral`, `kimi`, `deepseek`, `minimax`, `nemotron`, `qwen`, `glm` y `gpt-oss`
+- muestra modelos orientados a programación o marcados como `Downloadable`, incluyendo señales como `coder`, `code`, `gemma`, `devstral`, `kimi`, `deepseek`, `minimax`, `nemotron`, `qwen`, `glm` y `gpt-oss`
 - `moonshotai/kimi-k2.5` se detecta como modelo multimodal con ventana `256K` según la documentación de NVIDIA
 - Claude Connect lo trata como proveedor `OpenAI-compatible` por gateway local, por lo que Claude Code sigue usando la interfaz Anthropic local
 - para `moonshotai/kimi-k2.5`, el gateway agrega `chat_template_kwargs.thinking=true` y aplica presupuesto preventivo de contexto `256K`

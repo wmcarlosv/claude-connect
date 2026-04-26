@@ -12,7 +12,9 @@ import {
   buildOpenAIRequestFromAnthropic,
   estimateTokenCountFromAnthropicRequest,
   normalizeAnthropicRequestForUpstream,
-  writeAnthropicStreamFromMessage
+  writeAnthropicStreamContent,
+  writeAnthropicStreamFromMessage,
+  writeAnthropicStreamStart
 } from './messages.js';
 import { gatewayBasePath, gatewayBaseUrl, gatewayHost, gatewayPort } from './constants.js';
 import {
@@ -134,6 +136,80 @@ function sendJson(response, statusCode, payload) {
   response.end(`${JSON.stringify(payload, null, 2)}\n`);
 }
 
+function openAnthropicEventStream(response) {
+  response.writeHead(200, {
+    'content-type': 'text/event-stream; charset=utf-8',
+    'cache-control': 'no-cache, no-transform',
+    connection: 'keep-alive',
+    'x-accel-buffering': 'no'
+  });
+
+  response.socket?.setNoDelay?.(true);
+  response.flushHeaders?.();
+}
+
+function writeAnthropicSseEvent(response, event, payload) {
+  response.write(`event: ${event}\n`);
+  response.write(`data: ${JSON.stringify(payload)}\n\n`);
+}
+
+function buildPendingAnthropicMessage(context) {
+  return {
+    id: `msg_${Date.now().toString(36)}`,
+    type: 'message',
+    role: 'assistant',
+    model: getUpstreamModelId(context.profile),
+    content: [],
+    stop_reason: null,
+    stop_sequence: null,
+    usage: {
+      input_tokens: 0,
+      output_tokens: 0
+    }
+  };
+}
+
+export async function streamAnthropicMessageWithKeepAlive(response, messagePromise, context = null) {
+  openAnthropicEventStream(response);
+
+  if (context) {
+    writeAnthropicStreamStart(response, buildPendingAnthropicMessage(context));
+  } else {
+    writeAnthropicSseEvent(response, 'ping', {
+      type: 'ping'
+    });
+  }
+
+  const keepAlive = setInterval(() => {
+    if (!response.destroyed && !response.writableEnded) {
+      writeAnthropicSseEvent(response, 'ping', {
+        type: 'ping'
+      });
+    }
+  }, 2000);
+
+  try {
+    const anthropicMessage = await messagePromise;
+    clearInterval(keepAlive);
+    if (context) {
+      writeAnthropicStreamContent(response, anthropicMessage);
+    } else {
+      writeAnthropicStreamFromMessage(response, anthropicMessage);
+    }
+  } catch (error) {
+    clearInterval(keepAlive);
+    writeAnthropicSseEvent(response, 'error', {
+      type: 'error',
+      error: {
+        type: 'api_error',
+        message: error instanceof Error ? error.message : String(error)
+      }
+    });
+  } finally {
+    response.end();
+  }
+}
+
 async function readJsonBody(request) {
   const chunks = [];
   let totalLength = 0;
@@ -168,13 +244,82 @@ function getUpstreamModelId(profile) {
   return profile?.model?.upstreamModelId ?? profile?.model?.id ?? 'unknown';
 }
 
+function createGatewayTraceId() {
+  return `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function summarizeAnthropicBody(body) {
+  const messages = Array.isArray(body?.messages) ? body.messages : [];
+  const tools = Array.isArray(body?.tools) ? body.tools : [];
+
+  return {
+    stream: body?.stream === true,
+    messages: messages.length,
+    tools: tools.length,
+    hasImages: requestContainsImageInput(body),
+    estimatedInputTokens: estimateTokenCountFromAnthropicRequest(body)
+  };
+}
+
+export function buildGatewayTraceEvent({ traceId, phase, context = null, body = null, message = null, error = null, startedAt = null }) {
+  const durationMs = typeof startedAt === 'number' ? Date.now() - startedAt : undefined;
+  const content = Array.isArray(message?.content) ? message.content : [];
+  const usage = isObject(message?.usage) ? message.usage : {};
+  const event = {
+    ts: new Date().toISOString(),
+    traceId,
+    phase,
+    provider: context?.profile?.provider?.id ?? null,
+    model: context?.profile ? getUpstreamModelId(context.profile) : null,
+    apiStyle: context?.upstreamApiStyle ?? null
+  };
+
+  if (body) {
+    Object.assign(event, summarizeAnthropicBody(body));
+  }
+
+  if (message) {
+    Object.assign(event, {
+      stopReason: message.stop_reason ?? null,
+      outputBlocks: content.length,
+      toolUses: content.filter((block) => block?.type === 'tool_use').length,
+      textBlocks: content.filter((block) => block?.type === 'text').length,
+      inputTokens: Number(usage.input_tokens ?? 0),
+      outputTokens: Number(usage.output_tokens ?? 0)
+    });
+  }
+
+  if (error) {
+    event.error = error instanceof Error ? error.message : String(error);
+  }
+
+  if (durationMs !== undefined) {
+    event.durationMs = durationMs;
+  }
+
+  return event;
+}
+
+function logGatewayTrace(event) {
+  console.log(`[trace] ${JSON.stringify(event)}`);
+}
+
 function requestContainsImageInput(body) {
   return Array.isArray(body?.messages)
     && body.messages.some((messageItem) => Array.isArray(messageItem?.content)
       && messageItem.content.some((part) => part?.type === 'image'));
 }
 
+function isNvidiaGemma4Model(profile) {
+  const modelId = getUpstreamModelId(profile);
+  return profile?.provider?.id === 'nvidia' && /^google\/gemma-4\b/.test(modelId);
+}
+
 function profileSupportsImageInput(profile) {
+  if (isNvidiaGemma4Model(profile)) {
+    return true;
+  }
+
   if (typeof profile?.model?.supportsVision === 'boolean') {
     return profile.model.supportsVision;
   }
@@ -208,6 +353,142 @@ function stringifyUpstreamMessage(value) {
   }
 
   return String(value);
+}
+
+export function extractUpstreamErrorMessage(responsePayload, statusCode) {
+  const directMessage = stringifyUpstreamMessage(responsePayload?.error?.message)
+    || stringifyUpstreamMessage(responsePayload?.error?.detail)
+    || stringifyUpstreamMessage(responsePayload?.error?.description)
+    || stringifyUpstreamMessage(responsePayload?.message)
+    || stringifyUpstreamMessage(responsePayload?.detail)
+    || stringifyUpstreamMessage(responsePayload?.description)
+    || stringifyUpstreamMessage(responsePayload?.error);
+
+  if (directMessage) {
+    return directMessage;
+  }
+
+  for (const key of ['errors', 'details']) {
+    if (!Array.isArray(responsePayload?.[key])) {
+      continue;
+    }
+
+    const messages = responsePayload[key]
+      .map((item) => stringifyUpstreamMessage(item?.message)
+        || stringifyUpstreamMessage(item?.detail)
+        || stringifyUpstreamMessage(item?.description)
+        || stringifyUpstreamMessage(item))
+      .filter((item) => item.length > 0);
+
+    if (messages.length > 0) {
+      return messages.join(' | ');
+    }
+  }
+
+  return `HTTP ${statusCode}`;
+}
+
+const claudeConnectAgentHint = [
+  'Claude Connect compatibility rules:',
+  '- Think through the task internally before acting, but do not expose hidden chain-of-thought.',
+  '- When the task requires project changes, use the available tools to inspect and edit files instead of only describing steps.',
+  '- When using tools, emit strict JSON arguments only.',
+  '- File paths must be plain paths without surrounding quotes, trailing quotes, markdown, or punctuation.',
+  '- Keep terminal-facing Markdown simple; avoid LaTeX math for arrows or lists.'
+].join('\n');
+
+function applyClaudeConnectSystemHint(system) {
+  if (Array.isArray(system)) {
+    return [
+      {
+        type: 'text',
+        text: claudeConnectAgentHint
+      },
+      ...system
+    ];
+  }
+
+  const systemText = stringifyUpstreamMessage(system).trim();
+
+  if (systemText.length === 0) {
+    return claudeConnectAgentHint;
+  }
+
+  if (systemText.includes('Claude Connect compatibility rules:')) {
+    return system;
+  }
+
+  return `${claudeConnectAgentHint}\n\n${systemText}`;
+}
+
+export function applyClaudeConnectRequestGuidance(body) {
+  if (!isObject(body)) {
+    return body;
+  }
+
+  return {
+    ...body,
+    system: applyClaudeConnectSystemHint(body.system)
+  };
+}
+
+function buildAnthropicThinkingConfig(body) {
+  const maxTokens = typeof body?.max_tokens === 'number' ? body.max_tokens : 4096;
+  const budgetTokens = Math.max(512, Math.min(4096, Math.floor(maxTokens / 2)));
+
+  return {
+    type: 'enabled',
+    budget_tokens: budgetTokens
+  };
+}
+
+function buildDeepSeekOutputConfig(modelId) {
+  if (modelId === 'deepseek-v4-pro') {
+    return {
+      effort: 'max'
+    };
+  }
+
+  if (modelId === 'deepseek-v4-flash' || modelId === 'deepseek-reasoner') {
+    return {
+      effort: 'high'
+    };
+  }
+
+  return null;
+}
+
+export function applyProviderAnthropicRequestOptions(body, profile) {
+  if (!isObject(body)) {
+    return body;
+  }
+
+  const providerId = profile?.provider?.id;
+  const modelId = getUpstreamModelId(profile);
+  const shouldEnableDeepSeekThinking = providerId === 'deepseek'
+    && (modelId === 'deepseek-v4-flash' || modelId === 'deepseek-v4-pro' || modelId === 'deepseek-reasoner');
+
+  if (!shouldEnableDeepSeekThinking) {
+    return body;
+  }
+
+  const next = {
+    ...body
+  };
+
+  if (!isObject(next.thinking)) {
+    next.thinking = buildAnthropicThinkingConfig(body);
+  }
+
+  if (!isObject(next.output_config)) {
+    const outputConfig = buildDeepSeekOutputConfig(modelId);
+
+    if (outputConfig) {
+      next.output_config = outputConfig;
+    }
+  }
+
+  return next;
 }
 
 function resolveGatewayUpstreamConfig(profile) {
@@ -409,10 +690,7 @@ async function forwardUpstreamRequest({ targetUrl, headers, payload, context, re
     });
   }
 
-  const message = stringifyUpstreamMessage(responsePayload?.error?.message)
-    || stringifyUpstreamMessage(responsePayload?.message)
-    || stringifyUpstreamMessage(responsePayload?.error)
-    || `HTTP ${response.status}`;
+  const message = extractUpstreamErrorMessage(responsePayload, response.status);
   const providerName = context?.profile?.provider?.name ?? context?.profile?.provider?.id ?? 'El proveedor';
   const containsImageInput = Array.isArray(payload?.messages)
     && payload.messages.some((messageItem) => Array.isArray(messageItem?.content)
@@ -448,27 +726,84 @@ async function forwardChatCompletion({ openAiRequest, context, refreshOnUnauthor
   });
 }
 
-function applyProviderOpenAIRequestOptions(openAiRequest, profile) {
-  const providerId = profile?.provider?.id;
-  const modelId = getUpstreamModelId(profile);
+function isNvidiaThinkingModel(modelId) {
+  return /(?:kimi|gemma-4|deepseek|nemotron|gpt-oss|qwen|glm)/i.test(modelId);
+}
 
-  if (providerId !== 'nvidia') {
-    return openAiRequest;
-  }
-
-  if (modelId !== 'moonshotai/kimi-k2.5') {
-    return openAiRequest;
-  }
-
+function applyChatTemplateThinking(request) {
   return {
-    ...openAiRequest,
-    temperature: typeof openAiRequest.temperature === 'number' ? openAiRequest.temperature : 1,
-    top_p: typeof openAiRequest.top_p === 'number' ? openAiRequest.top_p : 0.95,
+    ...request,
     chat_template_kwargs: {
-      ...(isObject(openAiRequest.chat_template_kwargs) ? openAiRequest.chat_template_kwargs : {}),
+      ...(isObject(request.chat_template_kwargs) ? request.chat_template_kwargs : {}),
       thinking: true
     }
   };
+}
+
+function isOpenAIReasoningModel(modelId) {
+  return /^gpt-5(?:[.-]|$)/.test(modelId);
+}
+
+function getGeminiReasoningEffort(modelId) {
+  if (!/^gemini-(?:3|2\.5)-/.test(modelId)) {
+    return null;
+  }
+
+  if (/pro/i.test(modelId)) {
+    return 'high';
+  }
+
+  if (/lite/i.test(modelId)) {
+    return 'low';
+  }
+
+  return 'medium';
+}
+
+export function applyProviderOpenAIRequestOptions(openAiRequest, profile) {
+  const providerId = profile?.provider?.id;
+  const modelId = getUpstreamModelId(profile);
+
+  const request = {
+    ...openAiRequest
+  };
+
+  if (providerId === 'nvidia' && Array.isArray(request.tools) && request.tools.length > 0 && !('tool_choice' in request)) {
+    request.tool_choice = 'auto';
+  }
+
+  if (providerId === 'openai' && isOpenAIReasoningModel(modelId) && !('reasoning_effort' in request)) {
+    request.reasoning_effort = 'high';
+  }
+
+  const geminiReasoningEffort = providerId === 'gemini' ? getGeminiReasoningEffort(modelId) : null;
+
+  if (geminiReasoningEffort && !('reasoning_effort' in request)) {
+    request.reasoning_effort = geminiReasoningEffort;
+  }
+
+  if (providerId !== 'nvidia') {
+    return request;
+  }
+
+  if (modelId === 'google/gemma-4-31b-it') {
+    request.temperature = typeof request.temperature === 'number' ? request.temperature : 1;
+    request.top_p = typeof request.top_p === 'number' ? request.top_p : 0.95;
+    request.top_k = typeof request.top_k === 'number' ? request.top_k : 64;
+    return applyChatTemplateThinking(request);
+  }
+
+  if (modelId === 'moonshotai/kimi-k2.5') {
+    request.temperature = typeof request.temperature === 'number' ? request.temperature : 1;
+    request.top_p = typeof request.top_p === 'number' ? request.top_p : 0.95;
+    return applyChatTemplateThinking(request);
+  }
+
+  if (isNvidiaThinkingModel(modelId)) {
+    return applyChatTemplateThinking(request);
+  }
+
+  return request;
 }
 
 async function forwardOllamaChat({ ollamaRequest, context, refreshOnUnauthorized = true }) {
@@ -565,8 +900,13 @@ async function executeAnthropicMessageForContext({ body, context }) {
     throw new Error(`${providerName} no admite imagenes con el modelo ${modelName} en esta integracion. Usa un proveedor o modelo con soporte visual.`);
   }
 
+  const providerReadyBody = applyProviderAnthropicRequestOptions(
+    applyClaudeConnectRequestGuidance(body),
+    context.profile
+  );
+
   const guardedBody = enforceModelTokenBudget({
-    body,
+    body: providerReadyBody,
     profile: context.profile
   });
 
@@ -686,56 +1026,82 @@ async function executeVargasThunderMessage({ body, profile }) {
 }
 
 async function handleMessages(request, response) {
+  const traceId = createGatewayTraceId();
+  const startedAt = Date.now();
   const rawBody = await readJsonBody(request);
   const context = await resolveGatewayContext();
 
-  if (context.upstreamApiStyle === 'router-free') {
-    const anthropicMessage = await executeVargasThunderMessage({
-      body: rawBody,
-      profile: context.profile
+  logGatewayTrace(buildGatewayTraceEvent({
+    traceId,
+    phase: 'start',
+    context,
+    body: rawBody,
+    startedAt
+  }));
+
+  const traceMessagePromise = (messagePromise) => messagePromise
+    .then((message) => {
+      logGatewayTrace(buildGatewayTraceEvent({
+        traceId,
+        phase: 'end',
+        context,
+        body: rawBody,
+        message,
+        startedAt
+      }));
+      return message;
+    })
+    .catch((error) => {
+      logGatewayTrace(buildGatewayTraceEvent({
+        traceId,
+        phase: 'error',
+        context,
+        body: rawBody,
+        error,
+        startedAt
+      }));
+      throw error;
     });
 
+  if (context.upstreamApiStyle === 'router-free') {
     if (rawBody.stream === true) {
-      response.writeHead(200, {
-        'content-type': 'text/event-stream; charset=utf-8',
-        'cache-control': 'no-cache, no-transform',
-        connection: 'keep-alive',
-        'x-accel-buffering': 'no'
-      });
-      writeAnthropicStreamFromMessage(response, anthropicMessage);
-      response.end();
+      await streamAnthropicMessageWithKeepAlive(response, traceMessagePromise(executeVargasThunderMessage({
+        body: rawBody,
+        profile: context.profile
+      })), context);
       return;
     }
+
+    const anthropicMessage = await traceMessagePromise(executeVargasThunderMessage({
+      body: rawBody,
+      profile: context.profile
+    }));
 
     sendJson(response, 200, anthropicMessage);
     return;
   }
 
   if (context.upstreamApiStyle === 'anthropic') {
-    const upstreamResponse = await executeAnthropicMessageForContext({
+    const upstreamResponse = await traceMessagePromise(executeAnthropicMessageForContext({
       body: rawBody,
       context
-    });
+    }));
     sendJson(response, 200, upstreamResponse);
     return;
   }
 
-  const anthropicMessage = await executeAnthropicMessageForContext({
-    body: rawBody,
-    context
-  });
-
   if (rawBody.stream === true) {
-    response.writeHead(200, {
-      'content-type': 'text/event-stream; charset=utf-8',
-      'cache-control': 'no-cache, no-transform',
-      connection: 'keep-alive',
-      'x-accel-buffering': 'no'
-    });
-    writeAnthropicStreamFromMessage(response, anthropicMessage);
-    response.end();
+    await streamAnthropicMessageWithKeepAlive(response, traceMessagePromise(executeAnthropicMessageForContext({
+      body: rawBody,
+      context
+    })), context);
     return;
   }
+
+  const anthropicMessage = await traceMessagePromise(executeAnthropicMessageForContext({
+    body: rawBody,
+    context
+  }));
 
   sendJson(response, 200, anthropicMessage);
 }

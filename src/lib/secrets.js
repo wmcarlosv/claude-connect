@@ -8,7 +8,7 @@ export async function getManagedProviderTokenSecretPath(providerId) {
   return path.join(providerSecretsDir, `${slugifyProfileName(providerId)}.json`);
 }
 
-export async function saveManagedProviderTokenSecret({ providerId, providerName, envVar, token }) {
+export async function saveManagedProviderTokenSecret({ providerId, providerName, envVar, token, ...metadata }) {
   const filePath = await getManagedProviderTokenSecretPath(providerId);
 
   await fs.mkdir(path.dirname(filePath), { recursive: true });
@@ -20,6 +20,7 @@ export async function saveManagedProviderTokenSecret({ providerId, providerName,
       providerName,
       envVar,
       token,
+      ...metadata,
       savedAt: new Date().toISOString()
     }, null, 2)}\n`,
     { mode: 0o600 }

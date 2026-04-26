@@ -223,14 +223,14 @@ Fuentes oficiales:
 Modelos NVIDIA NIM:
 
 - se descubren dinámicamente desde `GET https://integrate.api.nvidia.com/v1/models`
-- Claude Connect filtra solo modelos orientados a coding
-- el filtro busca señales como `coder`, `code`, `devstral`, `kimi`, `deepseek`, `minimax`, `nemotron`, `qwen`, `glm` y `gpt-oss`
+- Claude Connect filtra modelos orientados a coding y modelos marcados como `Downloadable`
+- el filtro busca señales como `Downloadable`, `coder`, `code`, `gemma`, `devstral`, `kimi`, `deepseek`, `minimax`, `nemotron`, `qwen`, `glm` y `gpt-oss`
 
 Comportamiento:
 
 - el catálogo base no guarda modelos estáticos de NVIDIA
 - primero se guarda o reutiliza `NVIDIA_API_KEY`
-- luego se consulta `/models` y se muestra la lista filtrada
+- luego se consulta `/models` y se muestra la lista filtrada, incluyendo modelos descargables como `google/gemma-4-31b-it` cuando NVIDIA los expone
 - `moonshotai/kimi-k2.5`, si aparece en `/models`, se marca con soporte de visión
 - el gateway agrega `chat_template_kwargs.thinking=true` para `moonshotai/kimi-k2.5`
 - el presupuesto preventivo usa contexto `256K`, salida por defecto `8,192` y salida máxima `16,384` para `moonshotai/kimi-k2.5`
@@ -260,6 +260,65 @@ Fuente oficial:
 - https://platform.openai.com/docs/api-reference/chat/create
 - https://platform.openai.com/docs/api-reference/authentication
 - https://developers.openai.com/api/docs/models
+
+### Google Gemini
+
+- provider id: `gemini`
+- modelos:
+  - `gemini-3-pro-preview`
+  - `gemini-3-flash-preview`
+  - `gemini-2.5-pro`
+  - `gemini-2.5-flash`
+  - `gemini-2.5-flash-lite-preview-09-2025`
+- auth: `token`
+- variable sugerida: `GEMINI_API_KEY`
+- base URL del proveedor: `https://generativelanguage.googleapis.com/v1beta/openai`
+- integración: a través de gateway local Anthropic-compatible hacia `chat/completions`
+- presupuesto preventivo:
+  - contexto `1M`
+  - salida por defecto `8,192`
+  - salida máxima `65,536`
+
+Comportamiento:
+
+- usa el endpoint OpenAI-compatible oficial de Google Gemini
+- mantiene soporte de herramientas e imagenes a través del adaptador OpenAI-compatible
+- el gateway agrega `reasoning_effort` para modelos Gemini 3/2.5
+
+Fuente oficial:
+
+- https://ai.google.dev/gemini-api/docs/openai
+- https://ai.google.dev/models/gemini
+
+### Cloudflare Workers AI
+
+- provider id: `cloudflare-workers-ai`
+- auth: `token`
+- campos requeridos:
+  - `Cloudflare Account ID`
+  - `CLOUDFLARE_API_TOKEN`
+- base URL del proveedor: `https://api.cloudflare.com/client/v4`
+- integración: a través de gateway local Anthropic-compatible hacia el endpoint OpenAI-compatible de Workers AI
+
+Modelos Cloudflare Workers AI:
+
+- se descubren dinámicamente desde `GET https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/models/search`
+- se filtra por `task=Text Generation`
+- Claude Connect mapea cada modelo a `https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1/chat/completions`
+- se priorizan señales como `gpt-oss`, `kimi`, `qwen`, `glm`, `deepseek`, `coder`, `function calling`, `reasoning` y `vision`
+
+Notas:
+
+- Cloudflare Workers AI no expone "modelos gratis" como flag de catálogo; el plan tiene asignación gratuita diaria de `10,000 Neurons`
+- `Account ID` se guarda localmente junto con el token del proveedor, fuera del repo
+- el perfil guarda la URL final con el `account_id`
+
+Fuentes oficiales:
+
+- https://developers.cloudflare.com/workers-ai/get-started/rest-api/
+- https://developers.cloudflare.com/workers-ai/configuration/open-ai-compatibility/
+- https://developers.cloudflare.com/api/resources/ai/subresources/models/
+- https://developers.cloudflare.com/workers-ai/platform/pricing/
 
 ### Inception Labs
 
@@ -354,13 +413,15 @@ Si el perfil activado es:
 - `Kilo Code Models`: Claude usa el gateway local y reenvia a `https://api.kilo.ai/api/gateway/chat/completions`
 - `Ollama`: Claude usa el gateway local y reenvia a la URL del servidor configurado en `/api/chat`
 - `Ollama Cloud Models`: Claude usa el gateway local y reenvia a `https://ollama.com/api/chat`
-- `NVIDIA NIM`: Claude usa el gateway local y reenvia a `https://integrate.api.nvidia.com/v1/chat/completions` con el modelo de coding descubierto en `/models`
+- `NVIDIA NIM`: Claude usa el gateway local y reenvia a `https://integrate.api.nvidia.com/v1/chat/completions` con el modelo de coding o `Downloadable` descubierto en `/models`
 - `OpenAI`: Claude usa el gateway local y reenvia a `https://api.openai.com/v1/chat/completions`
+- `Google Gemini`: Claude usa el gateway local y reenvia a `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions`
+- `Cloudflare Workers AI`: Claude usa el gateway local y reenvia a `https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1/chat/completions`
 - `Inception Labs`: Claude usa el gateway local y reenvia a `https://api.inceptionlabs.ai/v1/chat/completions`
 - `OpenRouter`: Claude usa el gateway local y envía `openrouter/free` o el modelo free descubierto que selecciones
 - `Seto Kaiba`: Claude usa el gateway local como router virtual y hace failover entre perfiles gratuitos compatibles
 - `Qwen`: Claude usa el gateway local en `127.0.0.1:4310`
-- para `DeepSeek`, `Inception Labs` y `NVIDIA NIM` en `moonshotai/kimi-k2.5`, el gateway ahora ajusta `max_tokens` y bloquea conversaciones sobredimensionadas con un error claro que sugiere `/compact` o `/clear`
+- para `DeepSeek`, `Google Gemini`, `Inception Labs` y `NVIDIA NIM` en modelos conocidos, el gateway ahora ajusta `max_tokens` y bloquea conversaciones sobredimensionadas con un error claro que sugiere `/compact` o `/clear`
 
 También existen estas opciones en el menú:
 
@@ -492,6 +553,8 @@ Se usa hoy para:
 - `Ollama`
 - `NVIDIA NIM`
 - `OpenAI`
+- `Google Gemini`
+- `Cloudflare Workers AI`
 - `Qwen`
 - `Zen` en sus modelos `chat/completions`
 - `OpenRouter`

@@ -225,6 +225,126 @@ test('buildAnthropicMessageFromOpenAI maps tool calls back to anthropic blocks',
   });
 });
 
+test('buildAnthropicMessageFromOpenAI marks tool_use even when provider finish_reason is stop', () => {
+  const message = buildAnthropicMessageFromOpenAI({
+    requestedModel: 'google/gemma-4-31b-it',
+    response: {
+      id: 'chatcmpl_456',
+      model: 'google/gemma-4-31b-it',
+      usage: {
+        prompt_tokens: 72,
+        completion_tokens: 14
+      },
+      choices: [
+        {
+          finish_reason: 'stop',
+          message: {
+            role: 'assistant',
+            content: '',
+            tool_calls: [
+              {
+                id: 'call_1',
+                function: {
+                  name: 'read_file',
+                  arguments: '{"path":"package.json"}'
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  });
+
+  assert.equal(message.stop_reason, 'tool_use');
+  assert.equal(message.content[0].type, 'tool_use');
+});
+
+test('buildAnthropicMessageFromOpenAI normalizes unbalanced quotes in tool path inputs', () => {
+  const message = buildAnthropicMessageFromOpenAI({
+    requestedModel: 'google/gemma-4-31b-it',
+    response: {
+      id: 'chatcmpl_path_quote',
+      model: 'google/gemma-4-31b-it',
+      choices: [
+        {
+          finish_reason: 'tool_calls',
+          message: {
+            role: 'assistant',
+            content: '',
+            tool_calls: [
+              {
+                id: 'call_1',
+                function: {
+                  name: 'write_file',
+                  arguments: '{"path":"index.html\'","content":"ok"}'
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  });
+
+  assert.deepEqual(message.content[0].input, {
+    path: 'index.html',
+    content: 'ok'
+  });
+});
+
+test('buildAnthropicMessageFromOpenAI converts encoded Kimi tool text into tool_use blocks', () => {
+  const message = buildAnthropicMessageFromOpenAI({
+    requestedModel: '@cf/moonshotai/kimi-k2.6',
+    response: {
+      id: 'chatcmpl_kimi_tool',
+      model: '@cf/moonshotai/kimi-k2.6',
+      choices: [
+        {
+          finish_reason: 'tool_calls',
+          message: {
+            role: 'assistant',
+            content: '<|tool_calls_section_begin|><|tool_call_begin|>functions.read_file:0<|tool_call_argument_begin|>{"path":"package.json"}<|tool_call_end|><|tool_calls_section_end|>'
+          }
+        }
+      ]
+    }
+  });
+
+  assert.equal(message.stop_reason, 'tool_use');
+  assert.deepEqual(message.content, [
+    {
+      type: 'tool_use',
+      id: 'functions.read_file:0',
+      name: 'read_file',
+      input: {
+        path: 'package.json'
+      }
+    }
+  ]);
+});
+
+test('buildAnthropicMessageFromOpenAI normalizes raw latex arrows for terminal output', () => {
+  const message = buildAnthropicMessageFromOpenAI({
+    requestedModel: 'google/gemma-4-31b-it',
+    response: {
+      id: 'chatcmpl_789',
+      model: 'google/gemma-4-31b-it',
+      choices: [
+        {
+          finish_reason: 'stop',
+          message: {
+            role: 'assistant',
+            content: 'Nueva conexion $\\rightarrow$ Elegir proveedor $\\rightarrow$ Activar.'
+          }
+        }
+      ]
+    }
+  });
+
+  assert.equal(message.content[0].text, 'Nueva conexion -> Elegir proveedor -> Activar.');
+});
+
 test('estimateTokenCountFromAnthropicRequest returns a positive approximation', () => {
   const tokenCount = estimateTokenCountFromAnthropicRequest({
     system: 'Sistema',

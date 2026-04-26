@@ -209,6 +209,96 @@ function safeParseJson(value) {
   }
 }
 
+function extractEncodedToolCalls(text) {
+  if (typeof text !== 'string' || !text.includes('<|tool_call_begin|>')) {
+    return {
+      text,
+      toolCalls: []
+    };
+  }
+
+  const toolCalls = [];
+  let cleanedText = text
+    .replace(/<\|tool_calls_section_begin\|>/g, '')
+    .replace(/<\|tool_calls_section_end\|>/g, '');
+  const toolCallPattern = /<\|tool_call_begin\|>(.*?)<\|tool_call_argument_begin\|>(.*?)<\|tool_call_end\|>/gs;
+
+  cleanedText = cleanedText.replace(toolCallPattern, (_match, rawName, rawArguments) => {
+    const encodedName = String(rawName ?? '').trim();
+    const name = encodedName
+      .replace(/^functions\./, '')
+      .replace(/:\d+$/, '')
+      .trim();
+    const input = safeParseJson(String(rawArguments ?? '').trim());
+
+    if (name.length > 0) {
+      toolCalls.push({
+        id: encodedName || `toolu_${crypto.randomUUID().replace(/-/g, '')}`,
+        name,
+        input
+      });
+    }
+
+    return '';
+  });
+
+  return {
+    text: cleanedText.trim(),
+    toolCalls
+  };
+}
+
+const TOOL_PATH_FIELD_PATTERN = /(?:^|_)(?:path|file|filename|filepath|dir|directory|target|source)(?:$|_)/i;
+
+function normalizeToolPathValue(value) {
+  if (typeof value !== 'string' || value.length < 2) {
+    return value;
+  }
+
+  const trimmed = value.trim();
+
+  if (trimmed.length < 2) {
+    return value;
+  }
+
+  const first = trimmed[0];
+  const last = trimmed[trimmed.length - 1];
+
+  if ((first === '\'' && last === '\'') || (first === '"' && last === '"')) {
+    return trimmed.slice(1, -1);
+  }
+
+  const hasLeadingQuote = first === '\'' || first === '"';
+  const hasTrailingQuote = last === '\'' || last === '"';
+
+  if (hasTrailingQuote && !hasLeadingQuote && !trimmed.slice(0, -1).includes(last)) {
+    return trimmed.slice(0, -1);
+  }
+
+  if (hasLeadingQuote && !hasTrailingQuote && !trimmed.slice(1).includes(first)) {
+    return trimmed.slice(1);
+  }
+
+  return value;
+}
+
+function normalizeToolInput(value, key = '') {
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizeToolInput(item, key));
+  }
+
+  if (!isObject(value)) {
+    return TOOL_PATH_FIELD_PATTERN.test(key) ? normalizeToolPathValue(value) : value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).map(([entryKey, entryValue]) => [
+      entryKey,
+      normalizeToolInput(entryValue, entryKey)
+    ])
+  );
+}
+
 function mapStopReason(finishReason) {
   switch (finishReason) {
     case 'tool_calls':
@@ -221,6 +311,26 @@ function mapStopReason(finishReason) {
     default:
       return null;
   }
+}
+
+function normalizeTerminalMarkdownText(value) {
+  if (typeof value !== 'string' || value.length === 0) {
+    return value;
+  }
+
+  return value
+    .replace(/\$\\(?:rightarrow|to)\$/g, '->')
+    .replace(/\$\\(?:leftarrow)\$/g, '<-')
+    .replace(/\$\\(?:leftrightarrow)\$/g, '<->')
+    .replace(/\$\\(?:Rightarrow|implies)\$/g, '=>')
+    .replace(/\$\\(?:Leftarrow)\$/g, '<=')
+    .replace(/\$\\(?:Leftrightarrow|iff)\$/g, '<=>')
+    .replace(/\\(?:rightarrow|to)\b/g, '->')
+    .replace(/\\leftarrow\b/g, '<-')
+    .replace(/\\leftrightarrow\b/g, '<->')
+    .replace(/\\(?:Rightarrow|implies)\b/g, '=>')
+    .replace(/\\Leftarrow\b/g, '<=')
+    .replace(/\\(?:Leftrightarrow|iff)\b/g, '<=>');
 }
 
 export function estimateTokenCountFromAnthropicRequest(body) {
@@ -512,18 +622,29 @@ export function buildAnthropicMessageFromOpenAI({ response, requestedModel }) {
   const choice = response?.choices?.[0] ?? {};
   const assistantMessage = choice?.message ?? {};
   const content = [];
-  const text = typeof assistantMessage.content === 'string'
+  const rawText = typeof assistantMessage.content === 'string'
     ? assistantMessage.content
     : Array.isArray(assistantMessage.content)
       ? assistantMessage.content
           .map((item) => collectText(item))
           .join('\n')
       : '';
+  const parsedEncodedTools = extractEncodedToolCalls(rawText);
+  const text = parsedEncodedTools.text;
 
   if (text.length > 0) {
     content.push({
       type: 'text',
-      text
+      text: normalizeTerminalMarkdownText(text)
+    });
+  }
+
+  for (const toolCall of parsedEncodedTools.toolCalls) {
+    content.push({
+      type: 'tool_use',
+      id: toolCall.id || `toolu_${crypto.randomUUID().replace(/-/g, '')}`,
+      name: toolCall.name || 'tool',
+      input: normalizeToolInput(toolCall.input)
     });
   }
 
@@ -532,9 +653,13 @@ export function buildAnthropicMessageFromOpenAI({ response, requestedModel }) {
       type: 'tool_use',
       id: toolCall.id || `toolu_${crypto.randomUUID().replace(/-/g, '')}`,
       name: toolCall.function?.name || 'tool',
-      input: safeParseJson(toolCall.function?.arguments)
+      input: normalizeToolInput(safeParseJson(toolCall.function?.arguments))
     });
   }
+
+  const stopReason = content.some((block) => block.type === 'tool_use')
+    ? 'tool_use'
+    : mapStopReason(choice?.finish_reason);
 
   return {
     id: typeof response?.id === 'string'
@@ -544,7 +669,7 @@ export function buildAnthropicMessageFromOpenAI({ response, requestedModel }) {
     role: 'assistant',
     model: requestedModel || response?.model || 'unknown',
     content,
-    stop_reason: mapStopReason(choice?.finish_reason),
+    stop_reason: stopReason,
     stop_sequence: null,
     usage: {
       input_tokens: Number(response?.usage?.prompt_tokens ?? 0),
@@ -562,7 +687,7 @@ export function buildAnthropicMessageFromOllama({ response, requestedModel }) {
   if (text.length > 0) {
     content.push({
       type: 'text',
-      text
+      text: normalizeTerminalMarkdownText(text)
     });
   }
 
@@ -599,7 +724,7 @@ function writeSseEvent(response, event, payload) {
   response.write(`data: ${JSON.stringify(payload)}\n\n`);
 }
 
-export function writeAnthropicStreamFromMessage(response, message) {
+export function writeAnthropicStreamStart(response, message) {
   writeSseEvent(response, 'message_start', {
     type: 'message_start',
     message: {
@@ -613,7 +738,9 @@ export function writeAnthropicStreamFromMessage(response, message) {
       }
     }
   });
+}
 
+export function writeAnthropicStreamContent(response, message) {
   message.content.forEach((block, index) => {
     if (block.type === 'text') {
       writeSseEvent(response, 'content_block_start', {
@@ -685,4 +812,9 @@ export function writeAnthropicStreamFromMessage(response, message) {
   writeSseEvent(response, 'message_stop', {
     type: 'message_stop'
   });
+}
+
+export function writeAnthropicStreamFromMessage(response, message) {
+  writeAnthropicStreamStart(response, message);
+  writeAnthropicStreamContent(response, message);
 }

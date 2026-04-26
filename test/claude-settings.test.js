@@ -124,7 +124,7 @@ test('buildClaudeSettingsForProfile supports deepseek direct anthropic mode', ()
     provider,
     model: provider.models[1],
     authMethod: provider.authMethods[0],
-    profileName: 'deepseek-reasoner-token',
+    profileName: 'deepseek-v4-pro-token',
     apiKeyEnvVar: 'DEEPSEEK_API_KEY'
   });
 
@@ -138,16 +138,20 @@ test('buildClaudeSettingsForProfile supports deepseek direct anthropic mode', ()
     connectionMode: 'direct',
     extraEnv: {
       API_TIMEOUT_MS: '600000',
-      ANTHROPIC_MODEL: 'deepseek-reasoner',
-      ANTHROPIC_DEFAULT_HAIKU_MODEL: 'deepseek-reasoner'
+      ANTHROPIC_MODEL: 'deepseek-v4-pro',
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: 'deepseek-v4-pro',
+      ANTHROPIC_DEFAULT_SONNET_MODEL: 'deepseek-v4-pro',
+      ANTHROPIC_DEFAULT_OPUS_MODEL: 'deepseek-v4-pro'
     }
   });
 
-  assert.equal(next.model, 'deepseek-reasoner');
+  assert.equal(next.model, 'deepseek-v4-pro');
   assert.equal(next.env.ANTHROPIC_BASE_URL, 'https://api.deepseek.com/anthropic');
   assert.equal(next.env.ANTHROPIC_AUTH_TOKEN, 'deepseek-secret');
-  assert.equal(next.env.ANTHROPIC_MODEL, 'deepseek-reasoner');
-  assert.equal(next.env.ANTHROPIC_DEFAULT_HAIKU_MODEL, 'deepseek-reasoner');
+  assert.equal(next.env.ANTHROPIC_MODEL, 'deepseek-v4-pro');
+  assert.equal(next.env.ANTHROPIC_DEFAULT_HAIKU_MODEL, 'deepseek-v4-pro');
+  assert.equal(next.env.ANTHROPIC_DEFAULT_SONNET_MODEL, 'deepseek-v4-pro');
+  assert.equal(next.env.ANTHROPIC_DEFAULT_OPUS_MODEL, 'deepseek-v4-pro');
   assert.equal(next.env.API_TIMEOUT_MS, '600000');
   assert.equal(next.env.CLAUDE_CONNECT_CONNECTION_MODE, 'direct');
 
@@ -325,6 +329,61 @@ test('resolveClaudeTransportForProfile supports openai gateway models', async ()
     authMethod: provider.authMethods[0],
     profileName: 'openai-gpt-5-4-token',
     apiKeyEnvVar: 'OPENAI_API_KEY'
+  });
+  const transport = await resolveClaudeTransportForProfile({ profile });
+
+  assert.equal(transport.connectionMode, 'gateway');
+  assert.equal(transport.connectionBaseUrl, 'http://127.0.0.1:4310/anthropic');
+  assert.equal(transport.authEnvMode, 'auth_token');
+  assert.equal(transport.authToken, 'claude-connect-local');
+
+  store.close();
+});
+
+test('resolveClaudeTransportForProfile supports gemini gateway models', async () => {
+  const store = createCatalogStore({ filename: ':memory:' });
+  const provider = store.getProviderCatalog('gemini');
+  const profile = buildProfile({
+    provider,
+    model: provider.models.find((model) => model.id === 'gemini-3-pro-preview'),
+    authMethod: provider.authMethods[0],
+    profileName: 'gemini-3-pro-preview-token',
+    apiKeyEnvVar: 'GEMINI_API_KEY'
+  });
+  const transport = await resolveClaudeTransportForProfile({ profile });
+
+  assert.equal(transport.connectionMode, 'gateway');
+  assert.equal(transport.connectionBaseUrl, 'http://127.0.0.1:4310/anthropic');
+  assert.equal(transport.authEnvMode, 'auth_token');
+  assert.equal(transport.authToken, 'claude-connect-local');
+
+  store.close();
+});
+
+test('resolveClaudeTransportForProfile supports cloudflare workers ai gateway models', async () => {
+  const store = createCatalogStore({ filename: ':memory:' });
+  const provider = store.getProviderCatalog('cloudflare-workers-ai');
+  const profile = buildProfile({
+    provider: {
+      ...provider,
+      baseUrl: 'https://api.cloudflare.com/client/v4/accounts/0123456789abcdef0123456789abcdef/ai/v1'
+    },
+    model: {
+      id: 'openai-gpt-oss-120b',
+      name: 'GPT OSS 120B',
+      category: 'Workers AI',
+      contextWindow: 'Auto',
+      summary: 'Modelo descubierto desde Cloudflare.',
+      upstreamModelId: '@cf/openai/gpt-oss-120b',
+      transportMode: 'gateway',
+      apiStyle: 'openai-chat',
+      apiBaseUrl: 'https://api.cloudflare.com/client/v4/accounts/0123456789abcdef0123456789abcdef/ai/v1',
+      apiPath: '/chat/completions',
+      authEnvMode: 'auth_token'
+    },
+    authMethod: provider.authMethods[0],
+    profileName: 'cloudflare-workers-ai-openai-gpt-oss-120b-token',
+    apiKeyEnvVar: 'CLOUDFLARE_API_TOKEN'
   });
   const transport = await resolveClaudeTransportForProfile({ profile });
 

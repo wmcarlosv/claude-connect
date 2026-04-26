@@ -2,11 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createCatalogStore } from '../src/data/catalog-store.js';
 
-test('catalog seeds opencode-go, zen, kimi, deepseek, zai, ollama, ollama-cloud, kilo-free, nvidia, openai, inception, openrouter, s-kaiba and qwen providers with models and auth', () => {
+test('catalog seeds opencode-go, zen, kimi, deepseek, zai, ollama, ollama-cloud, kilo-free, nvidia, openai, gemini, cloudflare workers ai, inception, openrouter, s-kaiba and qwen providers with models and auth', () => {
   const store = createCatalogStore({ filename: ':memory:' });
   const providers = store.getProviders();
 
-  assert.equal(providers.length, 14);
+  assert.equal(providers.length, 16);
 
   const opencodeGo = store.getProviderCatalog('opencode-go');
   assert.ok(opencodeGo);
@@ -55,9 +55,10 @@ test('catalog seeds opencode-go, zen, kimi, deepseek, zai, ollama, ollama-cloud,
   assert.equal(deepseek.models.length, 2);
   assert.equal(deepseek.authMethods.length, 1);
   assert.equal(deepseek.authMethods[0].id, 'token');
-  assert.equal(deepseek.models[0].id, 'deepseek-chat');
-  assert.equal(deepseek.models[1].id, 'deepseek-reasoner');
+  assert.equal(deepseek.models[0].id, 'deepseek-v4-flash');
+  assert.equal(deepseek.models[1].id, 'deepseek-v4-pro');
   assert.equal(deepseek.models[0].transportMode, 'direct');
+  assert.equal(deepseek.models[0].supportsVision, false);
   assert.equal(deepseek.oauth, null);
 
   const zai = store.getProviderCatalog('zai');
@@ -117,6 +118,28 @@ test('catalog seeds opencode-go, zen, kimi, deepseek, zai, ollama, ollama-cloud,
   assert.equal(openai.models[2].id, 'gpt-5.3-codex');
   assert.equal(openai.models[6].id, 'gpt-5.1-codex-mini');
   assert.equal(openai.oauth, null);
+
+  const gemini = store.getProviderCatalog('gemini');
+  assert.ok(gemini);
+  assert.equal(gemini.baseUrl, 'https://generativelanguage.googleapis.com/v1beta/openai');
+  assert.equal(gemini.models.length, 5);
+  assert.equal(gemini.authMethods.length, 1);
+  assert.equal(gemini.authMethods[0].id, 'token');
+  assert.equal(gemini.models[0].id, 'gemini-3-pro-preview');
+  assert.equal(gemini.models[0].upstreamModelId, 'gemini-3-pro-preview');
+  assert.equal(gemini.models[0].transportMode, 'gateway');
+  assert.equal(gemini.models[0].apiStyle, 'openai-chat');
+  assert.equal(gemini.models[4].id, 'gemini-2.5-flash-lite-preview-09-2025');
+  assert.equal(gemini.oauth, null);
+
+  const cloudflare = store.getProviderCatalog('cloudflare-workers-ai');
+  assert.ok(cloudflare);
+  assert.equal(cloudflare.baseUrl, 'https://api.cloudflare.com/client/v4');
+  assert.equal(cloudflare.models.length, 0);
+  assert.equal(cloudflare.authMethods.length, 1);
+  assert.equal(cloudflare.authMethods[0].id, 'token');
+  assert.equal(cloudflare.defaultApiKeyEnvVar, 'CLOUDFLARE_API_TOKEN');
+  assert.equal(cloudflare.oauth, null);
 
   const inception = store.getProviderCatalog('inception');
   assert.ok(inception);
